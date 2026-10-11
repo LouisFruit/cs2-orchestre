@@ -6,7 +6,7 @@
   });
 
   const $ = (id) => document.getElementById(id);
-  const TITRES = { collecte: "Collecte", direct: "En direct", matchs: "Matchs", analyse: "Analyse", paris: "Paris", reglages: "Réglages" };
+  const TITRES = { collecte: "Collecte", direct: "En direct", matchs: "Matchs", analyse: "Analyse", paris: "Paris", reglages: "Réglages", alertes: "Alertes" };
   let pageCourante = "collecte";
   let minuteur = null;
   let matchsCache = [];
@@ -101,10 +101,12 @@
   async function rafraichir() {
     try {
       derniereMaj = Date.now();
+      majPastille();
       if (pageCourante === "collecte") await chargerCollecte();
       else if (pageCourante === "direct") await chargerDirect();
       else if (pageCourante === "matchs") await chargerMatchs();
       else if (pageCourante === "reglages") await chargerReglages();
+      else if (pageCourante === "alertes") await chargerAlertes();
       $("maj").textContent = "maj " + heureSeule(new Date().toISOString());
     } catch (err) {
       $("maj").textContent = "erreur de lecture";
@@ -464,6 +466,81 @@
     zone.appendChild(vt);
   }
 
+
+
+  /* ---------- Alertes (cloche + page) ---------- */
+  const NIVEAUX = { critique: "Critique", important: "Important", info: "Info" };
+  let filtreAlertes = "tous";
+  let alertesCache = [];
+
+  async function majPastille() {
+    try {
+      const r = await sb.from("app_notifications").select("niveau").is("lu_le", null).limit(100);
+      if (r.error) return;
+      const n = (r.data || []).length;
+      const p = $("pastille-alertes");
+      p.textContent = n >= 100 ? "99+" : String(n);
+      p.classList.toggle("cache", n === 0);
+      p.classList.toggle("critique", (r.data || []).some((x) => x.niveau === "critique"));
+    } catch (e) { /* la cloche est facultative */ }
+  }
+
+  $("btn-alertes").addEventListener("click", () => aller("alertes"));
+
+  async function chargerAlertes() {
+    const r = await sb.from("app_notifications").select("*").order("t", { ascending: false }).limit(100);
+    if (r.error) throw r.error;
+    alertesCache = r.data || [];
+    dessinerAlertes();
+  }
+
+  function dessinerAlertes() {
+    // filtres
+    const f = $("filtres-alertes");
+    vider(f);
+    [["tous", "Toutes"], ["critique", "Critiques"], ["important", "Importantes"], ["info", "Infos"]].forEach(([id, nom]) => {
+      const b = el("button", "filtre" + (filtreAlertes === id ? " actif" : ""), nom);
+      b.type = "button";
+      b.addEventListener("click", () => { filtreAlertes = id; dessinerAlertes(); });
+      f.appendChild(b);
+    });
+    // liste
+    const zone = $("liste-alertes");
+    vider(zone);
+    const liste = alertesCache.filter((a) => filtreAlertes === "tous" || a.niveau === filtreAlertes);
+    if (!liste.length) {
+      zone.appendChild(el("p", "discret", alertesCache.length ? "Aucune alerte dans ce filtre." : "Aucune alerte pour le moment."));
+      return;
+    }
+    liste.forEach((a) => {
+      const carte = el("button", "alerte niv-" + a.niveau + (a.lu_le ? "" : " nonlue") + (a.resolu_le ? " resolue" : ""));
+      carte.type = "button";
+      const t = el("div", "alerte-titre");
+      if (!a.lu_le) t.appendChild(el("span", "point-nonlu"));
+      t.appendChild(document.createTextNode(a.titre));
+      carte.appendChild(t);
+      if (a.corps) carte.appendChild(el("div", "alerte-corps", a.corps));
+      const m = el("div", "alerte-meta");
+      m.appendChild(el("span", null, heureAvecJour(a.t) + (a.source ? " · " + a.source : "")));
+      carte.appendChild(m);
+      const b = el("div", "badges");
+      b.appendChild(el("span", "badge niv-" + a.niveau, NIVEAUX[a.niveau] || a.niveau));
+      if (a.resolu_le) b.appendChild(el("span", "badge ok", "résolue à " + heureSeule(a.resolu_le)));
+      if (a.repetitions > 0) b.appendChild(el("span", "badge", "répétée " + a.repetitions + " fois"));
+      carte.appendChild(b);
+      carte.addEventListener("click", async () => {
+        if (a.lu_le) return;
+        const r = await sb.from("app_notifications").update({ lu_le: new Date().toISOString() }).eq("id", a.id);
+        if (!r.error) { await chargerAlertes(); majPastille(); }
+      });
+      zone.appendChild(carte);
+    });
+  }
+
+  $("btn-tout-lu").addEventListener("click", async () => {
+    const r = await sb.from("app_notifications").update({ lu_le: new Date().toISOString() }).is("lu_le", null);
+    if (!r.error) { await chargerAlertes(); majPastille(); }
+  });
 
   /* ---------- écran Réglages ---------- */
   const MODES = [

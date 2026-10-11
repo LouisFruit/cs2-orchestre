@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CS 2'Orchestre</title>
+<meta name="theme-color" content="#0f1419">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CS2 Orchestre">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ===== Écran de connexion ===== -->
+<section id="vue-connexion" class="cache">
+  <form id="form-connexion" class="carte connexion">
+    <h1>CS 2'Orchestre</h1>
+    <p class="discret">Connexion réservée au propriétaire.</p>
+    <label>E-mail
+      <input id="champ-email" type="email" autocomplete="username" required>
+    </label>
+    <label>Mot de passe
+      <input id="champ-mdp" type="password" autocomplete="current-password" required>
+    </label>
+    <button type="submit" class="bouton">Se connecter</button>
+    <p id="msg-connexion" class="erreur"></p>
+  </form>
+</section>
+
+<!-- ===== Application ===== -->
+<div id="vue-app" class="cache">
+  <header class="entete">
+    <h1 id="titre-page">Collecte</h1>
+    <div class="entete-droite">
+      <span id="maj" class="discret"></span>
+      <button id="btn-rafraichir" class="bouton-mini" title="Rafraîchir">↻</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Collecte -->
+    <section id="page-collecte" class="page">
+      <div id="bandeau-global" class="bandeau"></div>
+      <div id="liste-collecte"></div>
+      <p class="discret petit">Seuils : liste PS3838 et bulletin 30 min, HLTV 60 min, bo3.gg 90 min, OddsPapi 10 h. « En retard » = jusqu'à 4 fois le seuil, au-delà « silencieux ». Cito est un secours : « en veille ».</p>
+    </section>
+
+    <!-- Matchs -->
+    <section id="page-matchs" class="page cache">
+      <h2>Matchs du jour</h2>
+      <div id="liste-matchs"></div>
+      <details class="carte">
+        <summary>Matchs non liés à bo3.gg <span id="nb-non-lies" class="pastille"></span></summary>
+        <div id="liste-non-lies"></div>
+      </details>
+    </section>
+
+    <!-- Pages à venir -->
+    <section id="page-analyse" class="page cache">
+      <h2>Analyse</h2>
+      <div class="carte"><p>Bientôt : deux équipes, une carte, et l'analyse. Elle sera branchée sur le moteur conçu dans la discussion « DATA ANALYSE REGLES ».</p></div>
+    </section>
+    <section id="page-paris" class="page cache">
+      <h2>Paris</h2>
+      <div class="carte"><p>Bientôt : paris, bankroll, ROI et courbe.</p></div>
+    </section>
+    <section id="page-reglages" class="page cache">
+      <h2>Réglages</h2>
+      <div class="carte"><p>Bientôt : mode (lecture seule / fictif / réel), garde-fous et arrêt d'urgence.</p></div>
+      <button id="btn-deconnexion" class="bouton secondaire">Se déconnecter</button>
+    </section>
+  </main>
+
+  <nav class="onglets">
+    <button data-page="collecte" class="actif"><span>📡</span>Collecte</button>
+    <button data-page="matchs"><span>🎮</span>Matchs</button>
+    <button data-page="analyse" class="bientot"><span>🔎</span>Analyse</button>
+    <button data-page="paris" class="bientot"><span>💶</span>Paris</button>
+    <button data-page="reglages"><span>⚙️</span>Réglages</button>
+  </nav>
+</div>
+
+<!-- Fiche d'un match -->
+<div id="fiche" class="fiche cache" role="dialog" aria-modal="true">
+  <div class="fiche-contenu">
+    <button id="fiche-fermer" class="bouton-mini fermer" aria-label="Fermer">✕</button>
+    <h3 id="fiche-titre"></h3>
+    <p id="fiche-sous" class="discret"></p>
+    <div id="fiche-badges"></div>
+    <div class="carte">
+      <strong>Analyse</strong>
+      <p class="discret">Bientôt : l'analyse de ce match s'affichera ici (niveau des équipes, estimations par marché, cote minimale), dès que le moteur sera branché.</p>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

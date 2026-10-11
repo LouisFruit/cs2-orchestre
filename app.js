@@ -6,10 +6,13 @@
   });
 
   const $ = (id) => document.getElementById(id);
-  const TITRES = { collecte: "Collecte", matchs: "Matchs", analyse: "Analyse", paris: "Paris", reglages: "Réglages" };
+  const TITRES = { collecte: "Collecte", direct: "En direct", matchs: "Matchs", analyse: "Analyse", paris: "Paris", reglages: "Réglages" };
   let pageCourante = "collecte";
   let minuteur = null;
   let matchsCache = [];
+  let derniereMaj = 0;
+  let directCache = null;
+  let ficheDirectId = null;
 
   /* ---------- petits utilitaires (pas d'innerHTML : tout passe par textContent) ---------- */
   function el(tag, classe, texte) {
@@ -86,7 +89,10 @@
   /* ---------- rafraîchissement ---------- */
   function demarrerMinuteur() {
     arreterMinuteur();
-    minuteur = setInterval(() => { if (!document.hidden) rafraichir(); }, cfg.RAFRAICHIR_SECONDES * 1000);
+    minuteur = setInterval(() => {
+      if (document.hidden) return;
+      if (pageCourante === "direct" || Date.now() - derniereMaj >= cfg.RAFRAICHIR_SECONDES * 1000 - 500) rafraichir();
+    }, 10000);
   }
   function arreterMinuteur() { if (minuteur) { clearInterval(minuteur); minuteur = null; } }
   $("btn-rafraichir").addEventListener("click", rafraichir);
@@ -94,7 +100,9 @@
 
   async function rafraichir() {
     try {
+      derniereMaj = Date.now();
       if (pageCourante === "collecte") await chargerCollecte();
+      else if (pageCourante === "direct") await chargerDirect();
       else if (pageCourante === "matchs") await chargerMatchs();
       $("maj").textContent = "maj " + heureSeule(new Date().toISOString());
     } catch (err) {
@@ -253,10 +261,210 @@
     return b;
   }
 
+
+  /* ---------- écran En direct ---------- */
+  function classeFraicheur(sec, vert, orange) {
+    if (sec === null || sec === undefined) return "silencieux";
+    return sec <= vert ? "ok" : (sec <= orange ? "en_retard" : "silencieux");
+  }
+  function ageLisible(sec) {
+    if (sec === null || sec === undefined) return "—";
+    sec = Math.round(Number(sec));
+    if (sec < 60) return sec + " s";
+    return dureeLisible(sec / 60);
+  }
+  function nomPeriode(p) { return Number(p) === 0 ? "Match" : "Carte " + p; }
+  function pct(x) { return x === null || x === undefined ? "—" : Number(x).toFixed(1) + " %"; }
+  const TYPES_VICTOIRE = { Terrorists_Win: "élimination des CT", CTs_Win: "élimination des T", Target_Bombed: "bombe explosée", Bomb_Defused: "bombe désamorcée", Target_Saved: "temps écoulé" };
+  // Pool actuel de 7 cartes (vérifié sur les vetos récents). À mettre à jour si HLTV change de pool.
+  const POOL_CARTES = ["Ancient", "Anubis", "Cache", "Dust2", "Inferno", "Mirage", "Nuke"];
+  const VERBES_VETO = { removed: "a banni", picked: "a choisi" };
+
+  async function chargerDirect() {
+    const res = await sb.from("app_live_match").select("*");
+    if (res.error) throw res.error;
+    const matchs = res.data || [];
+    let rounds = [], cotes = [], vetos = [];
+    if (matchs.length) {
+      const [r, c, v] = await Promise.all([
+        sb.from("app_live_rounds").select("*").order("t", { ascending: true }),
+        sb.from("app_live_cotes").select("*"),
+        sb.from("app_live_veto").select("*")
+      ]);
+      if (r.error) throw r.error; if (c.error) throw c.error; if (v.error) throw v.error;
+      rounds = r.data || []; cotes = c.data || []; vetos = v.data || [];
+    }
+    directCache = { matchs, rounds, cotes, vetos };
+    dessinerDirect();
+    if (ficheDirectId !== null && !$("fiche").classList.contains("cache")) {
+      const m = matchs.find((x) => x.fiche_id === ficheDirectId);
+      if (m) remplirDetailDirect(m);
+    }
+  }
+
+  function dessinerDirect() {
+    const zone = $("liste-direct");
+    vider(zone);
+    const matchs = directCache.matchs.slice().sort((a, b) =>
+      String(b.dernier_round_le || "").localeCompare(String(a.dernier_round_le || "")));
+    const enCours = matchs.filter((m) => m.statut_match === "en_cours");
+    const autres = matchs.filter((m) => m.statut_match !== "en_cours");
+    if (!matchs.length) {
+      const c = el("div", "carte");
+      c.appendChild(el("p", null, "Aucun match en direct pour le moment."));
+      c.appendChild(el("p", "discret petit", "Cette page se remplit dès qu'un match suivi sur HLTV démarre. Elle se rafraîchit toute seule toutes les 10 secondes."));
+      zone.appendChild(c);
+      return;
+    }
+    zone.appendChild(el("h3", "groupe-titre", "En cours (" + enCours.length + ")"));
+    if (!enCours.length) zone.appendChild(el("p", "discret petit", "Aucun match n'est marqué « en cours »."));
+    enCours.forEach((m) => zone.appendChild(carteDirect(m)));
+    if (autres.length) {
+      zone.appendChild(el("h3", "groupe-titre", "Récemment actifs (" + autres.length + ")"));
+      autres.forEach((m) => zone.appendChild(carteDirect(m)));
+    }
+  }
+
+  function carteDirect(m) {
+    const b = el("button", "match");
+    b.type = "button";
+    const haut = el("div", "ligne2");
+    haut.appendChild(el("span", "equipes", (m.team1 || "?") + "  –  " + (m.team2 || "?")));
+    if (m.statut_match === "en_cours") haut.appendChild(el("span", "badge live", "● En cours"));
+    b.appendChild(haut);
+    if (m.dernier_round_fini !== null && m.dernier_round_fini !== undefined) {
+      const sc = el("div", "score-live");
+      sc.appendChild(el("span", "cote-equipe", (m.ct_team || "?") + " (CT)"));
+      sc.appendChild(el("span", "gros-score", m.score_ct + " – " + m.score_t));
+      sc.appendChild(el("span", "cote-equipe", (m.t_team || "?") + " (T)"));
+      b.appendChild(sc);
+      b.appendChild(el("div", "discret petit centre",
+        (m.carte || "carte ?") + " · carte " + m.carte_no + " · round " + m.dernier_round_fini + " terminé"));
+    } else {
+      b.appendChild(el("div", "discret petit", "Pas encore de round lu."));
+    }
+    const f = el("div", "fraicheur");
+    f.appendChild(el("span", "voyant " + classeFraicheur(m.age_round_s, 90, 300)));
+    f.appendChild(el("span", "discret petit", "dernier round il y a " + ageLisible(m.age_round_s) + " (HLTV a 35–60 s de retard)"));
+    b.appendChild(f);
+    b.addEventListener("click", () => ouvrirDirect(m));
+    return b;
+  }
+
+  function ouvrirDirect(m) {
+    ficheDirectId = m.fiche_id;
+    $("fiche-titre").textContent = (m.team1 || "?") + " – " + (m.team2 || "?");
+    $("fiche-sous").textContent = "En direct · données HLTV et PS3838";
+    vider($("fiche-badges"));
+    remplirDetailDirect(m);
+    $("fiche").classList.remove("cache");
+  }
+
+  function remplirDetailDirect(m) {
+    const zone = $("fiche-detail");
+    vider(zone);
+    const rounds = directCache.rounds.filter((r) => r.hltv_match_id === m.hltv_match_id);
+    const cotes = directCache.cotes.filter((c) => c.fiche_id === m.fiche_id);
+    const veto = directCache.vetos.find((v) => v.hltv_match_id === m.hltv_match_id);
+
+    // Score
+    const sc = el("div", "carte");
+    sc.appendChild(el("strong", null, "Score"));
+    if (m.dernier_round_fini !== null && m.dernier_round_fini !== undefined) {
+      sc.appendChild(el("p", null, (m.ct_team || "?") + " (CT) " + m.score_ct + " – " + m.score_t + " " + (m.t_team || "?") + " (T)"));
+      sc.appendChild(el("p", "discret petit", (m.carte || "carte ?") + " · carte " + m.carte_no + " · round " + m.dernier_round_fini + " terminé à " + heureSeule(m.dernier_round_le)));
+    } else sc.appendChild(el("p", "discret petit", "Pas encore de round lu."));
+    zone.appendChild(sc);
+
+    // Frise des rounds (une ligne par carte)
+    const fr = el("div", "carte");
+    fr.appendChild(el("strong", null, "Rounds"));
+    const cartes = {};
+    rounds.forEach((r) => { (cartes[r.carte_no] = cartes[r.carte_no] || []).push(r); });
+    const nums = Object.keys(cartes).sort((a, b) => a - b);
+    if (!nums.length) fr.appendChild(el("p", "discret petit", "Aucun round enregistré."));
+    nums.forEach((n) => {
+      const liste = cartes[n];
+      fr.appendChild(el("p", "discret petit", "Carte " + n + " · " + (liste[0].carte || "?")));
+      const f = el("div", "frise");
+      liste.forEach((r) => {
+        const c = el("span", "round " + (r.winner_side === "CT" || r.winner_side === "ct" ? "ct" : "t"), r.pistol ? "P" : "");
+        f.appendChild(c);
+      });
+      fr.appendChild(f);
+    });
+    fr.appendChild(el("p", "discret petit", "Bleu = victoire CT, orange = victoire T, P = pistol round."));
+    const derniers = rounds.slice(-5).reverse();
+    derniers.forEach((r) => {
+      let t = "Carte " + r.carte_no + " · R" + r.round_no + " · " + (r.winner_team || "?") + " (" + (r.winner_side === "CT" ? "CT" : (r.winner_side ? "T" : "?")) + ")";
+      if (r.win_type) t += " · " + (TYPES_VICTOIRE[r.win_type] || r.win_type);
+      if (r.bomb_site) t += " · site " + r.bomb_site;
+      fr.appendChild(el("p", "petit", t));
+    });
+    zone.appendChild(fr);
+
+    // Cotes
+    const co = el("div", "carte");
+    co.appendChild(el("strong", null, "Cotes PS3838 (30 dernières minutes)"));
+    if (!cotes.length) co.appendChild(el("p", "discret petit", "Aucune cote reçue récemment."));
+    else {
+      const plusRecent = Math.min.apply(null, cotes.map((c) => c.age_s));
+      const f = el("div", "fraicheur");
+      f.appendChild(el("span", "voyant " + classeFraicheur(plusRecent, 30, 120)));
+      f.appendChild(el("span", "discret petit", "dernière cote il y a " + ageLisible(plusRecent)));
+      co.appendChild(f);
+      const parMarche = {};
+      cotes.forEach((c) => { const k = c.market + " · " + nomPeriode(c.period); (parMarche[k] = parMarche[k] || []).push(c); });
+      Object.keys(parMarche).sort().forEach((k, i) => {
+        const d = el("details");
+        if (i === 0) d.open = true;
+        d.appendChild(el("summary", null, k + " (" + parMarche[k].length + ")"));
+        parMarche[k].sort((a, b) => Number(a.line || 0) - Number(b.line || 0)).slice(0, 40).forEach((c) => {
+          let t = (c.line !== null && c.line !== undefined ? "ligne " + c.line + " : " : "");
+          t += (c.c1 || "—") + " / " + (c.c2 || "—");
+          if (c.cn) t += " / nul " + c.cn;
+          t += " · " + ageLisible(c.age_s);
+          d.appendChild(el("p", "petit", t));
+        });
+        co.appendChild(d);
+      });
+    }
+    zone.appendChild(co);
+
+    // Probabilité HLTV (comparaison seulement)
+    const pr = el("div", "carte");
+    pr.appendChild(el("strong", null, "Probabilité HLTV (pour comparaison)"));
+    if (m.p_gauche === null || m.p_gauche === undefined) pr.appendChild(el("p", "discret petit", "Pas de probabilité lue."));
+    else {
+      pr.appendChild(el("p", null, (m.team_gauche || "?") + " " + pct(m.p_gauche) + " – " + pct(m.p_droite) + " " + (m.team_droite || "?")));
+      pr.appendChild(el("p", "discret petit", "Lue à " + heureSeule(m.proba_le) + ". Information stockée uniquement pour comparer, jamais utilisée pour décider."));
+    }
+    zone.appendChild(pr);
+
+    // Picks et bans
+    const vt = el("div", "carte");
+    vt.appendChild(el("strong", null, "Picks et bans"));
+    const liste = veto && Array.isArray(veto.veto) ? veto.veto.slice().sort((a, b) => a.n - b.n) : [];
+    if (!liste.length) vt.appendChild(el("p", "discret petit", "Pas encore de veto lu sur HLTV."));
+    liste.forEach((v) => vt.appendChild(el("p", "petit", v.n + ". " + (v.equipe || "?") + " " + (VERBES_VETO[v.action] || v.action || "") + " " + (v.carte || "?"))));
+    // Carte restante = décisive (déduite : pool de 7 moins les 6 cartes du veto)
+    if (liste.length === 6) {
+      const vues = liste.map((v) => String(v.carte || "").toLowerCase());
+      const reste = POOL_CARTES.filter((c) => vues.indexOf(c.toLowerCase()) === -1);
+      const toutesConnues = vues.every((c) => POOL_CARTES.some((p) => p.toLowerCase() === c));
+      if (reste.length === 1 && toutesConnues) {
+        vt.appendChild(el("p", "petit", "7. " + reste[0] + " : carte restante (décisive), déduite"));
+      }
+    }
+    zone.appendChild(vt);
+  }
+
   /* ---------- fiche d'un match ---------- */
   function ouvrirFiche(m) {
     $("fiche-titre").textContent = (m.team1 || "?") + " – " + (m.team2 || "?");
     $("fiche-sous").textContent = (m.league || "ligue inconnue") + " · " + heurePar(m.start_time);
+    ficheDirectId = null;
+    vider($("fiche-detail"));
     const zone = $("fiche-badges");
     vider(zone);
     zone.appendChild(badgesLiaison(m));
@@ -272,8 +480,9 @@
     zone.appendChild(lignes);
     $("fiche").classList.remove("cache");
   }
-  $("fiche-fermer").addEventListener("click", () => $("fiche").classList.add("cache"));
-  $("fiche").addEventListener("click", (e) => { if (e.target === $("fiche")) $("fiche").classList.add("cache"); });
+  function fermerFiche() { ficheDirectId = null; $("fiche").classList.add("cache"); }
+  $("fiche-fermer").addEventListener("click", fermerFiche);
+  $("fiche").addEventListener("click", (e) => { if (e.target === $("fiche")) fermerFiche(); });
 
   /* ---------- démarrage ---------- */
   (async function init() {

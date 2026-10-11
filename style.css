@@ -83,3 +83,14 @@ details summary{cursor:pointer;font-weight:600}
 .groupe-titre{font-size:.85rem;margin:18px 0 2px;color:var(--discret);text-transform:uppercase;letter-spacing:.04em}
 .badge.live{color:var(--rouge);border-color:#6a2025}
 .fiche-lignes p{margin:6px 0}
+
+/* v1.2 : en direct */
+.score-live{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px}
+.score-live .cote-equipe{flex:1;font-size:.85rem;text-align:center}
+.score-live .gros-score{font-size:1.6rem;font-weight:700}
+.centre{text-align:center;margin-top:4px}
+.fraicheur{display:flex;align-items:center;gap:8px;margin-top:8px}
+.frise{display:flex;flex-wrap:wrap;gap:3px;margin:4px 0 8px}
+.round{width:16px;height:16px;border-radius:3px;font-size:.6rem;line-height:16px;text-align:center;color:#06121f;font-weight:700}
+.round.ct{background:var(--accent)} .round.t{background:var(--retard)}
+#fiche-detail .carte p{margin:6px 0}

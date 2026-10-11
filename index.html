@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=1.1">
+<link rel="stylesheet" href="style.css?v=1.2">
 </head>
 <body>
 
@@ -50,6 +50,12 @@
       <p class="discret petit">Seuils : liste PS3838 et bulletin 30 min, HLTV 60 min, bo3.gg 90 min, OddsPapi 10 h. « En retard » = jusqu'à 4 fois le seuil, au-delà « silencieux ». Cito est un secours : « en veille ».</p>
     </section>
 
+    <!-- En direct -->
+    <section id="page-direct" class="page cache">
+      <h2>Matchs en direct</h2>
+      <div id="liste-direct"></div>
+    </section>
+
     <!-- Matchs -->
     <section id="page-matchs" class="page cache">
       <h2>Matchs du jour</h2>
@@ -73,12 +79,13 @@
       <h2>Réglages</h2>
       <div class="carte"><p>Bientôt : mode (lecture seule / fictif / réel), garde-fous et arrêt d'urgence.</p></div>
       <button id="btn-deconnexion" class="bouton secondaire">Se déconnecter</button>
-      <p class="discret petit">CS2'Orchestre v1.1</p>
+      <p class="discret petit">CS2'Orchestre v1.2</p>
     </section>
   </main>
 
   <nav class="onglets">
     <button data-page="collecte" class="actif"><span>📡</span>Collecte</button>
+    <button data-page="direct"><span>🔴</span>Direct</button>
     <button data-page="matchs"><span>🎮</span>Matchs</button>
     <button data-page="analyse" class="bientot"><span>🔎</span>Analyse</button>
     <button data-page="paris" class="bientot"><span>💶</span>Paris</button>
@@ -93,6 +100,7 @@
     <h3 id="fiche-titre"></h3>
     <p id="fiche-sous" class="discret"></p>
     <div id="fiche-badges"></div>
+    <div id="fiche-detail"></div>
     <div class="carte">
       <strong>Analyse</strong>
       <p class="discret">Bientôt : l'analyse de ce match s'affichera ici (niveau des équipes, estimations par marché, cote minimale), dès que le moteur sera branché.</p>
@@ -101,7 +109,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=1.1"></script>
-<script src="app.js?v=1.1"></script>
+<script src="config.js?v=1.2"></script>
+<script src="app.js?v=1.2"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 {
-  "name": "CS 2'Orchestre",
-  "short_name": "CS2 Orchestre",
+  "name": "CS2'Orchestre",
+  "short_name": "CS2'Orchestre",
   "description": "Suivi du robot de paris CS2",
   "start_url": "./index.html",
   "scope": "./",

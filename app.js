@@ -290,17 +290,18 @@
     const res = await sb.from("app_live_match").select("*");
     if (res.error) throw res.error;
     const matchs = res.data || [];
-    let rounds = [], cotes = [], vetos = [];
+    let rounds = [], cotes = [], vetos = [], series = [];
     if (matchs.length) {
-      const [r, c, v] = await Promise.all([
+      const [r, c, v, se] = await Promise.all([
         sb.from("app_live_rounds").select("*").order("t", { ascending: true }),
         sb.from("app_live_cotes").select("*"),
-        sb.from("app_live_veto").select("*")
+        sb.from("app_live_veto").select("*"),
+        sb.from("app_live_serie").select("*")
       ]);
-      if (r.error) throw r.error; if (c.error) throw c.error; if (v.error) throw v.error;
-      rounds = r.data || []; cotes = c.data || []; vetos = v.data || [];
+      if (r.error) throw r.error; if (c.error) throw c.error; if (v.error) throw v.error; if (se.error) throw se.error;
+      rounds = r.data || []; cotes = c.data || []; vetos = v.data || []; series = se.data || [];
     }
-    directCache = { matchs, rounds, cotes, vetos };
+    directCache = { matchs, rounds, cotes, vetos, series };
     dessinerDirect();
     if (ficheDirectId !== null && !$("fiche").classList.contains("cache")) {
       const m = matchs.find((x) => x.fiche_id === ficheDirectId);
@@ -308,13 +309,33 @@
     }
   }
 
+  function serieDe(m) { return (directCache.series || []).find((x) => x.hltv_match_id === m.hltv_match_id) || null; }
+  // État réel du match : jeu en cours / entre deux cartes / terminé
+  function etatSerie(m) {
+    const se = serieDe(m);
+    if (se && se.serie_terminee) return "termine";
+    if (m.statut_match === "termine") return "termine";
+    if (se && se.entre_cartes && m.age_round_s !== null && m.age_round_s < 1800) return "entre_cartes";
+    if (m.statut_match === "en_cours") return "en_jeu";
+    return "inactif";
+  }
+  function scoreCartes(m) {
+    const se = serieDe(m);
+    if (!se) return null;
+    const noms = [];
+    [m.ct_team, m.t_team].concat(Object.keys(se.victoires || {})).forEach((n) => { if (n && noms.indexOf(n) === -1) noms.push(n); });
+    noms.sort((a, b) => a.localeCompare(b));
+    if (!noms.length) return null;
+    return noms.map((n) => n + " " + ((se.victoires || {})[n] || 0)).join(" – ");
+  }
+
   function dessinerDirect() {
     const zone = $("liste-direct");
     vider(zone);
     const matchs = directCache.matchs.slice().sort((a, b) =>
       String(b.dernier_round_le || "").localeCompare(String(a.dernier_round_le || "")));
-    const enCours = matchs.filter((m) => m.statut_match === "en_cours");
-    const autres = matchs.filter((m) => m.statut_match !== "en_cours");
+    const enCours = matchs.filter((m) => { const e = etatSerie(m); return e === "en_jeu" || e === "entre_cartes"; });
+    const autres = matchs.filter((m) => { const e = etatSerie(m); return e !== "en_jeu" && e !== "entre_cartes"; });
     if (!matchs.length) {
       const c = el("div", "carte");
       c.appendChild(el("p", null, "Aucun match en direct pour le moment."));
@@ -336,7 +357,10 @@
     b.type = "button";
     const haut = el("div", "ligne2");
     haut.appendChild(el("span", "equipes", (m.team1 || "?") + "  –  " + (m.team2 || "?")));
-    if (m.statut_match === "en_cours") haut.appendChild(el("span", "badge live", "● En cours"));
+    const etat = etatSerie(m);
+    if (etat === "en_jeu") haut.appendChild(el("span", "badge live", "● En jeu"));
+    else if (etat === "entre_cartes") haut.appendChild(el("span", "badge pause", "⏸ Entre deux cartes"));
+    else if (etat === "termine") haut.appendChild(el("span", "badge", "Terminé"));
     b.appendChild(haut);
     if (m.dernier_round_fini !== null && m.dernier_round_fini !== undefined) {
       const sc = el("div", "score-live");
@@ -344,8 +368,13 @@
       sc.appendChild(el("span", "gros-score", m.score_ct + " – " + m.score_t));
       sc.appendChild(el("span", "cote-equipe", (m.t_team || "?") + " (T)"));
       b.appendChild(sc);
-      b.appendChild(el("div", "discret petit centre",
-        (m.carte || "carte ?") + " · carte " + m.carte_no + " · round " + m.dernier_round_fini + " terminé"));
+      const se = serieDe(m);
+      let infos = (m.carte || "carte ?") + " · carte " + m.carte_no + " · round " + m.dernier_round_fini + " terminé";
+      if (etat === "entre_cartes") infos = "Carte " + m.carte_no + " terminée" + (se && se.prochaine_carte ? " · prochaine : " + se.prochaine_carte : "");
+      else if (etat === "termine") infos = "Série terminée · dernière carte : " + (m.carte || "?");
+      b.appendChild(el("div", "discret petit centre", infos));
+      const sc2 = scoreCartes(m);
+      if (sc2) b.appendChild(el("div", "discret petit centre", "Cartes gagnées : " + sc2 + (se && se.bo ? "  (BO" + se.bo + ")" : "")));
     } else {
       b.appendChild(el("div", "discret petit", "Pas encore de round lu."));
     }
@@ -380,6 +409,13 @@
       sc.appendChild(el("p", null, (m.ct_team || "?") + " (CT) " + m.score_ct + " – " + m.score_t + " " + (m.t_team || "?") + " (T)"));
       sc.appendChild(el("p", "discret petit", (m.carte || "carte ?") + " · carte " + m.carte_no + " · round " + m.dernier_round_fini + " terminé à " + heureSeule(m.dernier_round_le)));
     } else sc.appendChild(el("p", "discret petit", "Pas encore de round lu."));
+    const se = serieDe(m);
+    const etat = etatSerie(m);
+    const libEtat = { en_jeu: "En jeu", entre_cartes: "Entre deux cartes", termine: "Série terminée", inactif: "Aucune activité récente" }[etat];
+    sc.appendChild(el("p", null, "Statut : " + libEtat + (se && se.bo ? " · BO" + se.bo : "")));
+    const scc = scoreCartes(m);
+    if (scc) sc.appendChild(el("p", "discret petit", "Cartes gagnées : " + scc));
+    if (etat === "entre_cartes" && se && se.prochaine_carte) sc.appendChild(el("p", "petit", "Prochaine carte : " + se.prochaine_carte));
     zone.appendChild(sc);
 
     // Frise des rounds (une ligne par carte)

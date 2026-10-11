@@ -6,7 +6,7 @@
   });
 
   const $ = (id) => document.getElementById(id);
-  const TITRES = { collecte: "Collecte", direct: "En direct", matchs: "Matchs", analyse: "Analyse", paris: "Paris", reglages: "Réglages", alertes: "Alertes" };
+  const TITRES = { collecte: "Collecte", direct: "En direct", matchs: "Matchs", analyse: "Analyse", paris: "Paris", reglages: "Réglages", alertes: "Alertes", notif: "Réglage des alertes" };
   let pageCourante = "collecte";
   let minuteur = null;
   let matchsCache = [];
@@ -108,6 +108,7 @@
       else if (pageCourante === "matchs") await chargerMatchs();
       else if (pageCourante === "reglages") await chargerReglages();
       else if (pageCourante === "alertes") await chargerAlertes();
+      else if (pageCourante === "notif") await chargerReglageNotif();
       $("maj").textContent = "maj " + heureSeule(new Date().toISOString());
     } catch (err) {
       $("maj").textContent = "erreur de lecture";
@@ -543,6 +544,76 @@
     if (!r.error) { await chargerAlertes(); majPastille(); }
   });
 
+
+
+  /* ---------- Réglage des notifications ---------- */
+  const GROUPES_NOTIF = [["critique", "Critiques"], ["important", "Importantes"], ["info", "Infos"]];
+  const MODES_NOTIF = [["auto", "Auto"], ["push", "Push"], ["lecture", "Lecture"]];
+  let reglageNotifCache = [];
+
+  $("btn-reglage-notif").addEventListener("click", () => aller("notif"));
+  $("btn-notif-retour").addEventListener("click", () => aller("alertes"));
+
+  function enPush(r) {
+    if (r.protege) return true;
+    if (r.mode === "push") return true;
+    if (r.mode === "lecture") return false;
+    return r.niveau_defaut === "critique" || r.niveau_defaut === "important"; // auto
+  }
+
+  async function chargerReglageNotif() {
+    const r = await sb.from("notif_reglages").select("*").order("libelle", { ascending: true });
+    if (r.error) throw r.error;
+    reglageNotifCache = r.data || [];
+    dessinerReglageNotif();
+  }
+
+  function dessinerReglageNotif() {
+    const zone = $("liste-notif");
+    vider(zone);
+    GROUPES_NOTIF.forEach(([niveau, titre]) => {
+      const lignes = reglageNotifCache.filter((x) => x.niveau_defaut === niveau);
+      if (!lignes.length) return;
+      zone.appendChild(el("h3", "groupe-titre", titre + " (" + lignes.length + ")"));
+      lignes.forEach((x) => zone.appendChild(ligneNotif(x)));
+    });
+    if (!reglageNotifCache.length) zone.appendChild(el("p", "discret", "Aucun type d'alerte enregistré."));
+  }
+
+  function ligneNotif(x) {
+    const carte = el("div", "carte reglage-notif");
+    carte.appendChild(el("div", "nom-notif", x.libelle || x.famille));
+    const push = enPush(x);
+    carte.appendChild(el("div", "etat-notif " + (push ? "push" : "lecture"),
+      push ? "🔔 En push sur l'iPhone" : "📋 Dans la liste seulement"));
+    if (x.protege) {
+      const l = el("label", "verrou");
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.checked = true; cb.disabled = true;
+      l.appendChild(cb);
+      l.appendChild(el("span", null, "🔒 Toujours en push (alerte de panne)"));
+      carte.appendChild(l);
+      return carte;
+    }
+    const seg = el("div", "segment");
+    MODES_NOTIF.forEach(([id, nom]) => {
+      const b = el("button", id === x.mode ? "actif" : "", nom);
+      b.type = "button";
+      b.addEventListener("click", () => changerModeNotif(x, id));
+      seg.appendChild(b);
+    });
+    carte.appendChild(seg);
+    return carte;
+  }
+
+  async function changerModeNotif(x, mode) {
+    if (x.protege || x.mode === mode) return;
+    const msg = $("msg-notif");
+    msg.textContent = "";
+    const r = await sb.from("notif_reglages").update({ mode: mode, maj_le: new Date().toISOString() }).eq("famille", x.famille);
+    if (r.error) { msg.textContent = "Échec de l'enregistrement : " + r.error.message; return; }
+    try { await chargerReglageNotif(); } catch (e) { msg.textContent = "Enregistré, mais impossible de relire la liste."; }
+  }
 
   /* ---------- Notifications push (cet appareil) ---------- */
   function pushPris() { return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window; }

@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=1.5">
+<link rel="stylesheet" href="style.css?v=1.6">
 </head>
 <body>
 
@@ -71,9 +71,21 @@
     <section id="page-alertes" class="page cache">
       <h2>Alertes</h2>
       <div id="filtres-alertes" class="filtres"></div>
-      <button id="btn-tout-lu" type="button" class="bouton secondaire">Tout marquer comme lu</button>
+      <div class="deux-boutons">
+        <button id="btn-tout-lu" type="button" class="bouton secondaire">Tout marquer comme lu</button>
+        <button id="btn-reglage-notif" type="button" class="bouton secondaire">⚙️ Réglage des alertes</button>
+      </div>
       <div id="liste-alertes"></div>
       <p class="discret petit">Touche une alerte pour la marquer comme lue. Une alerte « résolue » est une panne qui est revenue à la normale.</p>
+    </section>
+
+    <!-- Réglage des notifications -->
+    <section id="page-notif" class="page cache">
+      <button id="btn-notif-retour" type="button" class="bouton-mini">← Alertes</button>
+      <h2>Réglage des alertes</h2>
+      <p class="discret petit">Choisis, pour chaque type d'alerte, si elle sonne sur ton iPhone ou reste seulement dans la liste. « Auto » : critique et important sonnent, info reste dans la liste.</p>
+      <p id="msg-notif" class="erreur"></p>
+      <div id="liste-notif"></div>
     </section>
 
     <!-- Pages à venir -->
@@ -136,7 +148,7 @@
       </details>
 
       <button id="btn-deconnexion" class="bouton secondaire">Se déconnecter</button>
-      <p class="discret petit">CS2'Orchestre v1.5</p>
+      <p class="discret petit">CS2'Orchestre v1.6</p>
     </section>
   </main>
 
@@ -180,7 +192,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=1.5"></script>
-<script src="app.js?v=1.5"></script>
+<script src="config.js?v=1.6"></script>
+<script src="app.js?v=1.6"></script>
 </body>
 </html>

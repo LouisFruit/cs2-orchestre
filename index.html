@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=1.4">
+<link rel="stylesheet" href="style.css?v=1.5">
 </head>
 <body>
 
@@ -112,6 +112,18 @@
         <p class="discret petit">À 0, rien n'est autorisé. Le mode Réel exige les trois limites au-dessus de 0.</p>
       </form>
 
+      <div class="carte" id="carte-notifications">
+        <strong>Notifications sur cet appareil</strong>
+        <p id="texte-push" class="discret petit"></p>
+        <div class="deux-boutons">
+          <button id="btn-push-activer" type="button" class="bouton cache">Activer les notifications</button>
+          <button id="btn-push-test" type="button" class="bouton secondaire cache">Envoyer un test</button>
+          <button id="btn-push-desactiver" type="button" class="bouton secondaire cache">Désactiver</button>
+        </div>
+        <p id="msg-push" class="erreur"></p>
+        <p class="discret petit">Seules les alertes critiques et importantes sonnent. Les infos restent dans la cloche.</p>
+      </div>
+
       <div class="carte">
         <strong>Arrêt d'urgence</strong>
         <p id="texte-urgence" class="discret petit"></p>
@@ -124,7 +136,7 @@
       </details>
 
       <button id="btn-deconnexion" class="bouton secondaire">Se déconnecter</button>
-      <p class="discret petit">CS2'Orchestre v1.4</p>
+      <p class="discret petit">CS2'Orchestre v1.5</p>
     </section>
   </main>
 
@@ -168,7 +180,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=1.4"></script>
-<script src="app.js?v=1.4"></script>
+<script src="config.js?v=1.5"></script>
+<script src="app.js?v=1.5"></script>
 </body>
 </html>

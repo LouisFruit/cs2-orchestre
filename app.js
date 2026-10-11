@@ -49,6 +49,7 @@
     arreterMinuteur();
   }
   function montrerApp() {
+    if (location.hash === "#alertes") pageCourante = "alertes";
     $("vue-connexion").classList.add("cache");
     $("vue-app").classList.remove("cache");
     aller(pageCourante);
@@ -542,6 +543,98 @@
     if (!r.error) { await chargerAlertes(); majPastille(); }
   });
 
+
+  /* ---------- Notifications push (cet appareil) ---------- */
+  function pushPris() { return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window; }
+  function iosNonInstallee() {
+    return /iPhone|iPad/.test(navigator.userAgent) && !navigator.standalone &&
+      !(window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+  }
+  function cleVersOctets(b64) {
+    const pad = "=".repeat((4 - (b64.length % 4)) % 4);
+    const brut = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+    const out = new Uint8Array(brut.length);
+    for (let i = 0; i < brut.length; i++) out[i] = brut.charCodeAt(i);
+    return out;
+  }
+  async function monAbonnement() {
+    const reg = await navigator.serviceWorker.ready;
+    return reg.pushManager.getSubscription();
+  }
+
+  async function majEtatPush() {
+    const texte = $("texte-push");
+    const bA = $("btn-push-activer"), bT = $("btn-push-test"), bD = $("btn-push-desactiver");
+    [bA, bT, bD].forEach((b) => b.classList.add("cache"));
+    try {
+      if (!pushPris()) {
+        texte.textContent = iosNonInstallee()
+          ? "Ouvre l'appli depuis son icône de l'écran d'accueil pour pouvoir activer les notifications."
+          : "Ce navigateur ne gère pas les notifications.";
+        return;
+      }
+      if (Notification.permission === "denied") {
+        texte.textContent = "Notifications bloquées. Réactive-les dans Réglages de l'iPhone > Notifications > CS2'Orchestre.";
+        return;
+      }
+      const sub = await monAbonnement();
+      if (sub && Notification.permission === "granted") {
+        texte.textContent = "Activées sur cet appareil.";
+        bT.classList.remove("cache"); bD.classList.remove("cache");
+      } else {
+        texte.textContent = "Désactivées sur cet appareil.";
+        bA.classList.remove("cache");
+      }
+    } catch (e) { texte.textContent = "État des notifications indisponible."; }
+  }
+
+  $("btn-push-activer").addEventListener("click", async () => {
+    const msg = $("msg-push");
+    msg.textContent = "";
+    try {
+      const perm = await Notification.requestPermission(); // doit rester le premier appel (geste de l'utilisateur)
+      if (perm !== "granted") { msg.textContent = "Autorisation refusée."; await majEtatPush(); return; }
+      const r = await sb.functions.invoke("envoyer-push", { body: { action: "cle" } });
+      if (r.error || !r.data || !r.data.publicKey) throw new Error("clé d'envoi indisponible");
+      const reg = await navigator.serviceWorker.ready;
+      const ancien = await reg.pushManager.getSubscription();
+      if (ancien) await ancien.unsubscribe();
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: cleVersOctets(r.data.publicKey) });
+      const j = sub.toJSON();
+      const ins = await sb.from("app_push_abonnements").upsert(
+        { endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, agent: navigator.userAgent.slice(0, 200) },
+        { onConflict: "endpoint" });
+      if (ins.error) throw ins.error;
+      msg.textContent = "";
+    } catch (err) { msg.textContent = "Échec : " + (err.message || err); }
+    await majEtatPush();
+  });
+
+  $("btn-push-desactiver").addEventListener("click", async () => {
+    const msg = $("msg-push");
+    msg.textContent = "";
+    try {
+      const sub = await monAbonnement();
+      if (sub) {
+        const endpoint = sub.endpoint;
+        await sub.unsubscribe();
+        await sb.from("app_push_abonnements").delete().eq("endpoint", endpoint);
+      }
+    } catch (err) { msg.textContent = "Échec : " + (err.message || err); }
+    await majEtatPush();
+  });
+
+  $("btn-push-test").addEventListener("click", async () => {
+    const msg = $("msg-push");
+    msg.textContent = "";
+    const r = await sb.rpc("notifier", {
+      p_niveau: "important", p_source: "appli", p_cle: "test_push_" + Date.now(),
+      p_titre: "Test de notification", p_corps: "Si tu lis ceci sur ton iPhone, les notifications marchent.", p_delai_min: 0
+    });
+    msg.textContent = r.error ? "Échec de l'envoi du test : " + r.error.message : "Test envoyé : la notification arrive dans quelques secondes.";
+    majPastille();
+  });
+
   /* ---------- écran Réglages ---------- */
   const MODES = [
     { id: "lecture_seule", nom: "Lecture seule", desc: "Le robot observe et ne place aucun pari." },
@@ -605,6 +698,7 @@
     if (!r.data) throw new Error("réglages introuvables");
     reglages = r.data;
     dessinerReglages();
+    majEtatPush();
     const j = await sb.from("app_reglages_journal").select("*").order("t", { ascending: false }).limit(30);
     if (j.error) throw j.error;
     dessinerJournal(j.data || []);
@@ -753,6 +847,12 @@
   (async function init() {
     const { data } = await sb.auth.getSession();
     if (data && data.session) montrerApp(); else montrerConnexion();
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("sw.js").catch(() => {});
+      navigator.serviceWorker.addEventListener("message", (e) => {
+        if (e.data && e.data.aller === "alertes" && !$("vue-app").classList.contains("cache")) aller("alertes");
+      });
+    }
     sb.auth.onAuthStateChange((evenement) => { if (evenement === "SIGNED_OUT") montrerConnexion(); });
   })();
 })();

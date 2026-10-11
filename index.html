@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=1.2.1">
+<link rel="stylesheet" href="style.css?v=1.3">
 </head>
 <body>
 
@@ -77,9 +77,44 @@
     </section>
     <section id="page-reglages" class="page cache">
       <h2>Réglages</h2>
-      <div class="carte"><p>Bientôt : mode (lecture seule / fictif / réel), garde-fous et arrêt d'urgence.</p></div>
+      <div id="bandeau-mode" class="bandeau"></div>
+
+      <div class="carte">
+        <strong>Mode</strong>
+        <div id="choix-mode" class="choix-mode"></div>
+        <p id="msg-mode" class="erreur"></p>
+        <p class="discret petit">Le robot ne place encore aucun pari : ces réglages seront lus par lui plus tard. Le mode Réel n'est jamais activé sans ta confirmation.</p>
+      </div>
+
+      <form id="form-garde-fous" class="carte">
+        <strong>Garde-fous</strong>
+        <label>Mise maximum par pari (€)
+          <input id="champ-mise-pari" type="text" inputmode="decimal" autocomplete="off">
+        </label>
+        <label>Mise maximum par jour (€)
+          <input id="champ-mise-jour" type="text" inputmode="decimal" autocomplete="off">
+        </label>
+        <label>Perte maximum par jour (€)
+          <input id="champ-perte-jour" type="text" inputmode="decimal" autocomplete="off">
+        </label>
+        <button type="submit" class="bouton">Enregistrer les garde-fous</button>
+        <p id="msg-garde-fous" class="erreur"></p>
+        <p class="discret petit">À 0, rien n'est autorisé. Le mode Réel exige les trois limites au-dessus de 0.</p>
+      </form>
+
+      <div class="carte">
+        <strong>Arrêt d'urgence</strong>
+        <p id="texte-urgence" class="discret petit"></p>
+        <button id="btn-urgence" type="button" class="bouton danger"></button>
+      </div>
+
+      <details class="carte">
+        <summary>Journal des changements</summary>
+        <div id="journal-reglages"></div>
+      </details>
+
       <button id="btn-deconnexion" class="bouton secondaire">Se déconnecter</button>
-      <p class="discret petit">CS2'Orchestre v1.2.1</p>
+      <p class="discret petit">CS2'Orchestre v1.3</p>
     </section>
   </main>
 
@@ -91,6 +126,20 @@
     <button data-page="paris" class="bientot"><span>💶</span>Paris</button>
     <button data-page="reglages"><span>⚙️</span>Réglages</button>
   </nav>
+</div>
+
+<!-- Confirmation -->
+<div id="confirm" class="fiche cache" role="dialog" aria-modal="true">
+  <div class="fiche-contenu">
+    <h3 id="confirm-titre"></h3>
+    <p id="confirm-texte"></p>
+    <input id="confirm-champ" type="text" autocomplete="off" class="cache">
+    <p id="confirm-msg" class="erreur"></p>
+    <div class="deux-boutons">
+      <button id="confirm-non" type="button" class="bouton secondaire">Annuler</button>
+      <button id="confirm-oui" type="button" class="bouton">Confirmer</button>
+    </div>
+  </div>
 </div>
 
 <!-- Fiche d'un match -->
@@ -109,7 +158,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=1.2.1"></script>
-<script src="app.js?v=1.2.1"></script>
+<script src="config.js?v=1.3"></script>
+<script src="app.js?v=1.3"></script>
 </body>
 </html>

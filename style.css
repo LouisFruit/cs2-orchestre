@@ -94,3 +94,20 @@ details summary{cursor:pointer;font-weight:600}
 .round{width:16px;height:16px;border-radius:3px;font-size:.6rem;line-height:16px;text-align:center;color:#06121f;font-weight:700}
 .round.ct{background:var(--accent)} .round.t{background:var(--retard)}
 #fiche-detail .carte p{margin:6px 0}
+
+/* v1.3 : réglages */
+.choix-mode{display:flex;flex-direction:column;gap:8px;margin:10px 0 4px}
+.choix-mode button{text-align:left;background:var(--fond);color:var(--texte);border:1px solid var(--bord);
+  border-radius:10px;padding:10px 12px;font-size:1rem}
+.choix-mode button .desc{display:block;font-size:.8rem;color:var(--discret);margin-top:2px}
+.choix-mode button.actif{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.choix-mode button.reel.actif{border-color:var(--rouge);box-shadow:0 0 0 1px var(--rouge)}
+#form-garde-fous{display:flex;flex-direction:column;gap:10px}
+.bouton.danger{background:var(--rouge);color:#fff;width:100%;padding:16px;font-size:1.05rem;margin-top:6px}
+.bouton.danger.lever{background:var(--carte);color:var(--texte);border:1px solid var(--bord)}
+.deux-boutons{display:flex;gap:10px;margin-top:12px}
+.deux-boutons .bouton{flex:1;margin-top:0}
+#confirm{z-index:30}
+#confirm-champ{width:100%;margin-top:8px}
+.ligne-journal{padding:8px 0;border-top:1px solid var(--bord);font-size:.9rem}
+.ligne-journal:first-child{border-top:0}

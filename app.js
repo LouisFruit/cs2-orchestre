@@ -104,6 +104,7 @@
       if (pageCourante === "collecte") await chargerCollecte();
       else if (pageCourante === "direct") await chargerDirect();
       else if (pageCourante === "matchs") await chargerMatchs();
+      else if (pageCourante === "reglages") await chargerReglages();
       $("maj").textContent = "maj " + heureSeule(new Date().toISOString());
     } catch (err) {
       $("maj").textContent = "erreur de lecture";
@@ -462,6 +463,189 @@
     }
     zone.appendChild(vt);
   }
+
+
+  /* ---------- écran Réglages ---------- */
+  const MODES = [
+    { id: "lecture_seule", nom: "Lecture seule", desc: "Le robot observe et ne place aucun pari." },
+    { id: "fictif", nom: "Paris fictifs", desc: "Le robot note des paris pour de faux, avec le capital fictif." },
+    { id: "reel", nom: "Réel", desc: "Argent réel sur PS3838. Demande ta confirmation." }
+  ];
+  const LIBELLES_CHAMP = { mode: "Mode", mise_max_pari: "Mise max par pari", mise_max_jour: "Mise max par jour",
+    perte_max_jour: "Perte max par jour", arret_urgence: "Arrêt d'urgence" };
+  let reglages = null;
+  let gardeFousModifies = false;
+
+  function nomMode(id) { const m = MODES.find((x) => x.id === id); return m ? m.nom : id; }
+  function valeurJournal(champ, v) {
+    if (v === null || v === undefined) return "—";
+    if (champ === "mode") return nomMode(v);
+    if (champ === "arret_urgence") return v === "true" ? "activé" : "levé";
+    return Number(v).toString().replace(".", ",") + " €";
+  }
+  function lireMontant(texte) {
+    const t = String(texte).trim().replace(",", ".");
+    if (t === "" || !/^\d+(\.\d{1,2})?$/.test(t)) return null;
+    return Number(t);
+  }
+  function aucunChampActif() {
+    const a = document.activeElement;
+    return !a || !$("form-garde-fous").contains(a);
+  }
+
+  // Fenêtre de confirmation. motAttendu (facultatif) : l'utilisateur doit le taper.
+  function confirmer(titre, texte, motAttendu, libelleOui) {
+    return new Promise((resolve) => {
+      $("confirm-titre").textContent = titre;
+      $("confirm-texte").textContent = texte;
+      $("confirm-msg").textContent = "";
+      $("confirm-oui").textContent = libelleOui || "Confirmer";
+      const champ = $("confirm-champ");
+      champ.value = "";
+      champ.classList.toggle("cache", !motAttendu);
+      champ.placeholder = motAttendu ? "Tape " + motAttendu : "";
+      $("confirm").classList.remove("cache");
+      const norm = (x) => String(x).trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+      function fin(v) {
+        $("confirm").classList.add("cache");
+        $("confirm-oui").onclick = null; $("confirm-non").onclick = null;
+        resolve(v);
+      }
+      $("confirm-non").onclick = () => fin(false);
+      $("confirm-oui").onclick = () => {
+        if (motAttendu && norm(champ.value) !== norm(motAttendu)) {
+          $("confirm-msg").textContent = "Le mot ne correspond pas.";
+          return;
+        }
+        fin(true);
+      };
+    });
+  }
+
+  async function chargerReglages() {
+    const r = await sb.from("app_reglages").select("*").eq("id", 1).maybeSingle();
+    if (r.error) throw r.error;
+    if (!r.data) throw new Error("réglages introuvables");
+    reglages = r.data;
+    dessinerReglages();
+    const j = await sb.from("app_reglages_journal").select("*").order("t", { ascending: false }).limit(30);
+    if (j.error) throw j.error;
+    dessinerJournal(j.data || []);
+  }
+
+  function dessinerReglages() {
+    const g = reglages;
+    // Bandeau
+    const b = $("bandeau-mode");
+    b.className = "bandeau " + (g.arret_urgence ? "rouge" : (g.mode === "reel" ? "rouge" : (g.mode === "fictif" ? "alerte" : "ok")));
+    b.textContent = g.arret_urgence ? "ARRÊT D'URGENCE ACTIF — le robot ne doit rien placer"
+      : "Mode actuel : " + nomMode(g.mode);
+
+    // Choix du mode
+    const zone = $("choix-mode");
+    vider(zone);
+    MODES.forEach((m) => {
+      const bt = el("button", m.id === "reel" ? "reel" : "");
+      bt.type = "button";
+      if (g.mode === m.id) bt.classList.add("actif");
+      bt.appendChild(el("strong", null, m.nom + (g.mode === m.id ? "  ✓" : "")));
+      bt.appendChild(el("span", "desc", m.desc));
+      bt.addEventListener("click", () => changerMode(m.id));
+      zone.appendChild(bt);
+    });
+
+    // Garde-fous (on ne réécrit pas les champs pendant la saisie)
+    if (!gardeFousModifies && aucunChampActif()) {
+      $("champ-mise-pari").value = String(Number(g.mise_max_pari)).replace(".", ",");
+      $("champ-mise-jour").value = String(Number(g.mise_max_jour)).replace(".", ",");
+      $("champ-perte-jour").value = String(Number(g.perte_max_jour)).replace(".", ",");
+    }
+
+    // Arrêt d'urgence
+    const u = $("btn-urgence");
+    u.classList.toggle("lever", !!g.arret_urgence);
+    u.textContent = g.arret_urgence ? "Lever l'arrêt d'urgence" : "ARRÊT D'URGENCE";
+    $("texte-urgence").textContent = g.arret_urgence
+      ? "Actif depuis " + heurePar(g.modifie_le) + ". Le robot doit rester à l'arrêt tant qu'il n'est pas levé."
+      : "Un appui coupe tout immédiatement, sans confirmation. Le mode et les garde-fous ne changent pas.";
+  }
+
+  function dessinerJournal(lignes) {
+    const zone = $("journal-reglages");
+    vider(zone);
+    if (!lignes.length) { zone.appendChild(el("p", "discret petit", "Aucun changement enregistré.")); return; }
+    lignes.forEach((l) => {
+      const d = el("div", "ligne-journal");
+      d.appendChild(el("div", null, (LIBELLES_CHAMP[l.champ] || l.champ) + " : " + valeurJournal(l.champ, l.ancienne) + " → " + valeurJournal(l.champ, l.nouvelle)));
+      d.appendChild(el("div", "discret petit", heurePar(l.t)));
+      zone.appendChild(d);
+    });
+  }
+
+  async function enregistrer(champs) {
+    const r = await sb.from("app_reglages").update(champs).eq("id", 1);
+    if (r.error) throw r.error;
+    await chargerReglages();
+  }
+
+  async function changerMode(id) {
+    const msg = $("msg-mode");
+    msg.textContent = "";
+    if (!reglages || id === reglages.mode) return;
+    try {
+      if (id === "reel") {
+        const g = reglages;
+        if (g.arret_urgence) { msg.textContent = "Impossible : lève d'abord l'arrêt d'urgence."; return; }
+        if (!(Number(g.mise_max_pari) > 0 && Number(g.mise_max_jour) > 0 && Number(g.perte_max_jour) > 0)) {
+          msg.textContent = "Impossible : règle d'abord les trois garde-fous au-dessus de 0.";
+          return;
+        }
+        const ok = await confirmer("Passer en mode RÉEL ?",
+          "Le robot pourra engager de l'argent réel sur PS3838, dans la limite de " + g.mise_max_pari + " € par pari, " +
+          g.mise_max_jour + " € par jour et " + g.perte_max_jour + " € de perte par jour.", "RÉEL", "Passer en réel");
+        if (!ok) return;
+      } else if (id === "fictif") {
+        const ok = await confirmer("Passer en paris fictifs ?", "Le robot notera des paris pour de faux, avec le capital fictif. Aucun argent réel.", null, "Passer en fictif");
+        if (!ok) return;
+      }
+      await enregistrer({ mode: id });
+    } catch (err) { msg.textContent = "Échec de l'enregistrement : " + (err.message || err); }
+  }
+
+  ["champ-mise-pari", "champ-mise-jour", "champ-perte-jour"].forEach((id) =>
+    $(id).addEventListener("input", () => { gardeFousModifies = true; }));
+
+  $("form-garde-fous").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const msg = $("msg-garde-fous");
+    msg.textContent = "";
+    const pari = lireMontant($("champ-mise-pari").value);
+    const jour = lireMontant($("champ-mise-jour").value);
+    const perte = lireMontant($("champ-perte-jour").value);
+    if (pari === null || jour === null || perte === null) { msg.textContent = "Entre des montants valides (ex. 5 ou 12,50)."; return; }
+    if (pari > jour) { msg.textContent = "La mise par pari ne peut pas dépasser la mise par jour."; return; }
+    try {
+      await enregistrer({ mise_max_pari: pari, mise_max_jour: jour, perte_max_jour: perte });
+      gardeFousModifies = false;
+      await chargerReglages();
+      msg.textContent = "";
+    } catch (err) { msg.textContent = "Échec de l'enregistrement : " + (err.message || err); }
+  });
+
+  $("btn-urgence").addEventListener("click", async () => {
+    if (!reglages) return;
+    const msg = $("msg-mode");
+    msg.textContent = "";
+    try {
+      if (reglages.arret_urgence) {
+        const ok = await confirmer("Lever l'arrêt d'urgence ?", "Le robot pourra reprendre selon le mode et les garde-fous en place (mode actuel : " + nomMode(reglages.mode) + ").", null, "Lever l'arrêt");
+        if (!ok) return;
+        await enregistrer({ arret_urgence: false });
+      } else {
+        await enregistrer({ arret_urgence: true });
+      }
+    } catch (err) { msg.textContent = "Échec de l'enregistrement : " + (err.message || err); }
+  });
 
   /* ---------- fiche d'un match ---------- */
   function ouvrirFiche(m) {

@@ -279,6 +279,7 @@
   // Pool actuel de 7 cartes (vérifié sur les vetos récents). À mettre à jour si HLTV change de pool.
   const POOL_CARTES = ["Ancient", "Anubis", "Cache", "Dust2", "Inferno", "Mirage", "Nuke"];
   const VERBES_VETO = { removed: "a banni", picked: "a choisi" };
+  const ACTION_RESTANTE = "left_over";
 
   async function chargerDirect() {
     const res = await sb.from("app_live_match").select("*");
@@ -446,14 +447,17 @@
     vt.appendChild(el("strong", null, "Picks et bans"));
     const liste = veto && Array.isArray(veto.veto) ? veto.veto.slice().sort((a, b) => a.n - b.n) : [];
     if (!liste.length) vt.appendChild(el("p", "discret petit", "Pas encore de veto lu sur HLTV."));
-    liste.forEach((v) => vt.appendChild(el("p", "petit", v.n + ". " + (v.equipe || "?") + " " + (VERBES_VETO[v.action] || v.action || "") + " " + (v.carte || "?"))));
+    liste.forEach((v) => {
+      if (v.action === ACTION_RESTANTE) vt.appendChild(el("p", "petit", v.n + ". " + (v.carte || "?") + " : carte restante (décisive)"));
+      else vt.appendChild(el("p", "petit", v.n + ". " + (v.equipe || "?") + " " + (VERBES_VETO[v.action] || v.action || "") + " " + (v.carte || "?")));
+    });
     // Carte restante = décisive (déduite : pool de 7 moins les 6 cartes du veto)
-    if (liste.length === 6) {
+    if (liste.length === 6 && !liste.some((v) => v.action === ACTION_RESTANTE)) {
       const vues = liste.map((v) => String(v.carte || "").toLowerCase());
       const reste = POOL_CARTES.filter((c) => vues.indexOf(c.toLowerCase()) === -1);
       const toutesConnues = vues.every((c) => POOL_CARTES.some((p) => p.toLowerCase() === c));
       if (reste.length === 1 && toutesConnues) {
-        vt.appendChild(el("p", "petit", "7. " + reste[0] + " : carte restante (décisive), déduite"));
+        vt.appendChild(el("p", "petit", "7. " + reste[0] + " : carte restante (décisive), déduite faute de lecture HLTV"));
       }
     }
     zone.appendChild(vt);

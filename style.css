@@ -78,3 +78,8 @@ details summary{cursor:pointer;font-weight:600}
   max-width:720px;margin:0 auto}
 .fermer{position:absolute;top:12px;right:12px}
 .fiche-contenu h3{padding-right:44px;margin-bottom:4px}
+
+/* v1.1 */
+.groupe-titre{font-size:.85rem;margin:18px 0 2px;color:var(--discret);text-transform:uppercase;letter-spacing:.04em}
+.badge.live{color:var(--rouge);border-color:#6a2025}
+.fiche-lignes p{margin:6px 0}

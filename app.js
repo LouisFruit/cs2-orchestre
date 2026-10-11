@@ -143,6 +143,32 @@
   }
 
   /* ---------- écran Matchs ---------- */
+  const SOURCES_STATUT = { bo3: "bo3.gg", hltv: "HLTV", ps3838: "PS3838" };
+  const LIBELLES_MATCH = { en_cours: "en cours", a_venir: "à venir", termine: "terminé", inconnu: "inconnu" };
+  const GROUPES = [
+    { cle: "en_cours", titre: "En cours", ouvert: true },
+    { cle: "a_venir", titre: "À venir", ouvert: true },
+    { cle: "inconnu", titre: "Statut inconnu", ouvert: true },
+    { cle: "termine", titre: "Terminés", ouvert: false }
+  ];
+
+  function jourParis(dateIso) {
+    return new Date(dateIso).toLocaleDateString("en-CA", { timeZone: "Europe/Paris" }); // AAAA-MM-JJ
+  }
+  function ecartJours(dateIso) {
+    const a = jourParis(dateIso).split("-").map(Number);
+    const b = jourParis(new Date().toISOString()).split("-").map(Number);
+    return Math.round((Date.UTC(a[0], a[1] - 1, a[2]) - Date.UTC(b[0], b[1] - 1, b[2])) / 86400000);
+  }
+  function heureAvecJour(dateIso) {
+    if (!dateIso) return "—";
+    const e = ecartJours(dateIso), h = heureSeule(dateIso);
+    if (e === 0) return h;
+    if (e === -1) return "hier " + h;
+    if (e === 1) return "demain " + h;
+    return new Date(dateIso).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris", day: "2-digit", month: "2-digit" }) + " " + h;
+  }
+
   async function chargerMatchs() {
     const [jour, nonLies] = await Promise.all([
       sb.from("app_matchs_du_jour").select("*").order("start_time", { ascending: true }),
@@ -157,17 +183,20 @@
     if (matchsCache.length === 0) {
       liste.appendChild(el("div", "carte discret", "Aucun match aujourd'hui dans PS3838."));
     }
-    matchsCache.forEach((m, i) => {
-      const bouton = el("button", "match");
-      bouton.type = "button";
-      bouton.appendChild(el("div", "equipes", (m.team1 || "?") + "  –  " + (m.team2 || "?")));
-      const l2 = el("div", "ligne2");
-      l2.appendChild(el("span", null, m.league || "ligue inconnue"));
-      l2.appendChild(el("span", null, heureSeule(m.start_time)));
-      bouton.appendChild(l2);
-      bouton.appendChild(badgesLiaison(m));
-      bouton.addEventListener("click", () => ouvrirFiche(m));
-      liste.appendChild(bouton);
+
+    GROUPES.forEach((g) => {
+      const items = matchsCache.filter((m) => (m.statut_match || "inconnu") === g.cle);
+      if (items.length === 0) return;
+      if (g.cle === "termine") items.reverse(); // les plus récents d'abord
+      if (g.ouvert) {
+        liste.appendChild(el("h3", "groupe-titre", g.titre + " (" + items.length + ")"));
+        items.forEach((m) => liste.appendChild(carteMatch(m)));
+      } else {
+        const d = el("details", "carte");
+        d.appendChild(el("summary", null, g.titre + " (" + items.length + ")"));
+        items.forEach((m) => d.appendChild(carteMatch(m)));
+        liste.appendChild(d);
+      }
     });
 
     $("nb-non-lies").textContent = String((nonLies.data || []).length);
@@ -182,14 +211,45 @@
     });
   }
 
+  function carteMatch(m) {
+    const bouton = el("button", "match");
+    bouton.type = "button";
+    bouton.appendChild(el("div", "equipes", (m.team1 || "?") + "  –  " + (m.team2 || "?")));
+    const l2 = el("div", "ligne2");
+    l2.appendChild(el("span", null, m.league || "ligue inconnue"));
+    l2.appendChild(el("span", null, heureAvecJour(m.start_time)));
+    bouton.appendChild(l2);
+    bouton.appendChild(badgesLiaison(m));
+    bouton.addEventListener("click", () => ouvrirFiche(m));
+    return bouton;
+  }
+
   function libelleCouverture(c) {
     return ({ hors_couverture: "hors couverture bo3.gg", a_verifier: "à vérifier", trou_a_corriger: "trou à corriger", liee: "liée", inconnue: "non évalué" })[c] || c || "non évalué";
   }
 
+  // Libellé HLTV selon le statut écrit par l'orchestre (repli sur l'ancien indicateur si absent)
+  function etatHltv(m) {
+    const s = m.hltv_statut;
+    if (!s) return m.lie_hltv ? { t: "HLTV lié", c: "ok" } : { t: "HLTV non lié", c: "non" };
+    if (s === "lie") return { t: "HLTV lié", c: "ok" };
+    if (s === "page_ouverte") return { t: "HLTV page ouverte", c: "ok" };
+    if (s === "absent") return { t: "Absent de HLTV", c: "non" };
+    const notes = {
+      ambigu: "HLTV : plusieurs candidats",
+      academy_refuse: "HLTV : équipe Academy refusée",
+      heure_differente: "HLTV : heure différente",
+      pas_trouve: "Pas encore trouvé sur HLTV"
+    };
+    return { t: notes[m.hltv_note] || "HLTV à vérifier", c: "non" };
+  }
+
   function badgesLiaison(m) {
     const b = el("div", "badges");
+    if (m.statut_match === "en_cours") b.appendChild(el("span", "badge live", "● En cours"));
     b.appendChild(el("span", "badge " + (m.lie_bo3 ? "ok" : "non"), m.lie_bo3 ? "bo3.gg lié" : "bo3.gg non lié"));
-    b.appendChild(el("span", "badge " + (m.lie_hltv ? "ok" : "non"), m.lie_hltv ? "HLTV lié" : "HLTV non lié"));
+    const h = etatHltv(m);
+    b.appendChild(el("span", "badge " + h.c, h.t));
     return b;
   }
 
@@ -200,7 +260,16 @@
     const zone = $("fiche-badges");
     vider(zone);
     zone.appendChild(badgesLiaison(m));
-    if (!m.lie_bo3) zone.appendChild(el("p", "discret petit", "Couverture bo3.gg : " + libelleCouverture(m.couverture_bo3)));
+
+    const lignes = el("div", "fiche-lignes");
+    const statut = m.statut_match || "inconnu";
+    let txt = "Statut du match : " + (LIBELLES_MATCH[statut] || statut);
+    if (m.statut_source) txt += " (source " + (SOURCES_STATUT[m.statut_source] || m.statut_source) + ")";
+    if (m.statut_maj_le) txt += ", mis à jour à " + heureSeule(m.statut_maj_le);
+    lignes.appendChild(el("p", "discret petit", txt));
+    if (m.hltv_verifie_le) lignes.appendChild(el("p", "discret petit", "Dernière vérification HLTV : " + heureSeule(m.hltv_verifie_le)));
+    if (!m.lie_bo3) lignes.appendChild(el("p", "discret petit", "Couverture bo3.gg : " + libelleCouverture(m.couverture_bo3)));
+    zone.appendChild(lignes);
     $("fiche").classList.remove("cache");
   }
   $("fiche-fermer").addEventListener("click", () => $("fiche").classList.add("cache"));

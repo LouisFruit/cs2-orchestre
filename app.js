@@ -92,7 +92,7 @@
     arreterMinuteur();
     minuteur = setInterval(() => {
       if (document.hidden) return;
-      if (pageCourante === "direct" || Date.now() - derniereMaj >= cfg.RAFRAICHIR_SECONDES * 1000 - 500) rafraichir();
+      if ((pageCourante === "matchs" && aDuDirect()) || Date.now() - derniereMaj >= cfg.RAFRAICHIR_SECONDES * 1000 - 500) rafraichir();
     }, 10000);
   }
   function arreterMinuteur() { if (minuteur) { clearInterval(minuteur); minuteur = null; } }
@@ -104,7 +104,6 @@
       derniereMaj = Date.now();
       majPastille();
       if (pageCourante === "collecte") await chargerCollecte();
-      else if (pageCourante === "direct") await chargerDirect();
       else if (pageCourante === "matchs") await chargerMatchs();
       else if (pageCourante === "reglages") await chargerReglages();
       else if (pageCourante === "alertes") await chargerAlertes();
@@ -182,10 +181,27 @@
     return new Date(dateIso).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris", day: "2-digit", month: "2-digit" }) + " " + h;
   }
 
+  // Rang d'un match pour le regroupement : direct / a_venir / termine / inconnu
+  function categorieMatch(m, lm) {
+    const etat = lm ? etatSerie(lm) : (m.statut_match === "en_cours" ? "en_jeu" : "inactif");
+    if (etat === "en_jeu" || etat === "entre_cartes") return "direct";
+    if (etat === "termine") return "termine";
+    const st = m.statut_match || "inconnu";
+    if (st === "en_cours") return "direct";
+    return st; // a_venir | termine | inconnu
+  }
+  function liveDe(m) {
+    return directCache ? (directCache.matchs || []).find((x) => x.fiche_id === m.fiche_id) || null : null;
+  }
+  function aDuDirect() {
+    return !!(directCache && (directCache.matchs || []).some((x) => { const e = etatSerie(x); return e === "en_jeu" || e === "entre_cartes"; }));
+  }
+
   async function chargerMatchs() {
     const [jour, nonLies] = await Promise.all([
       sb.from("app_matchs_du_jour").select("*").order("start_time", { ascending: true }),
-      sb.from("app_matchs_non_lies").select("*").order("start_time", { ascending: false }).limit(60)
+      sb.from("app_matchs_non_lies").select("*").order("start_time", { ascending: false }).limit(60),
+      chargerDonneesDirect()
     ]);
     if (jour.error) throw jour.error;
     if (nonLies.error) throw nonLies.error;
@@ -197,20 +213,40 @@
       liste.appendChild(el("div", "carte discret", "Aucun match aujourd'hui dans PS3838."));
     }
 
-    GROUPES.forEach((g) => {
-      const items = matchsCache.filter((m) => (m.statut_match || "inconnu") === g.cle);
-      if (items.length === 0) return;
-      if (g.cle === "termine") items.reverse(); // les plus récents d'abord
-      if (g.ouvert) {
-        liste.appendChild(el("h3", "groupe-titre", g.titre + " (" + items.length + ")"));
-        items.forEach((m) => liste.appendChild(carteMatch(m)));
-      } else {
-        const d = el("details", "carte");
-        d.appendChild(el("summary", null, g.titre + " (" + items.length + ")"));
-        items.forEach((m) => d.appendChild(carteMatch(m)));
-        liste.appendChild(d);
-      }
+    const groupes = { direct: [], a_venir: [], termine: [], inconnu: [] };
+    matchsCache.forEach((m) => {
+      const lm = liveDe(m);
+      const cat = categorieMatch(m, lm);
+      (groupes[cat] || groupes.inconnu).push({ m, lm });
     });
+    groupes.direct.sort((x, y) => String((y.lm && y.lm.dernier_round_le) || "").localeCompare(String((x.lm && x.lm.dernier_round_le) || "")));
+    groupes.termine.reverse(); // les plus récents d'abord
+
+    // 1. En direct (toujours affiché)
+    liste.appendChild(el("h3", "groupe-titre", "En direct (" + groupes.direct.length + ")"));
+    if (!groupes.direct.length) liste.appendChild(el("p", "discret petit", "Aucun match en direct pour le moment."));
+    groupes.direct.forEach(({ m, lm }) => liste.appendChild(lm ? carteDirect(lm) : carteMatch(m)));
+
+    // 2. À venir
+    if (groupes.a_venir.length) {
+      liste.appendChild(el("h3", "groupe-titre", "À venir (" + groupes.a_venir.length + ")"));
+      groupes.a_venir.forEach(({ m }) => liste.appendChild(carteMatch(m)));
+    }
+    // 3. Terminés (repliés)
+    if (groupes.termine.length) {
+      const d = el("details", "carte");
+      d.appendChild(el("summary", null, "Terminés (" + groupes.termine.length + ")"));
+      groupes.termine.forEach(({ m }) => d.appendChild(carteMatch(m)));
+      liste.appendChild(d);
+    }
+    // 4. Sans confirmation (repliés)
+    if (groupes.inconnu.length) {
+      const d = el("details", "carte");
+      d.appendChild(el("summary", null, "Sans confirmation (" + groupes.inconnu.length + ")"));
+      d.appendChild(el("p", "discret petit", "Heure de début passée, mais aucune source ne confirme que le match a eu lieu (pas de cotes en direct, pas de rounds, pas de résultat)."));
+      groupes.inconnu.forEach(({ m }) => d.appendChild(carteMatch(m)));
+      liste.appendChild(d);
+    }
 
     $("nb-non-lies").textContent = String((nonLies.data || []).length);
     const zone = $("liste-non-lies");
@@ -286,7 +322,7 @@
   const VERBES_VETO = { removed: "a banni", picked: "a choisi" };
   const ACTION_RESTANTE = "left_over";
 
-  async function chargerDirect() {
+  async function chargerDonneesDirect() {
     const res = await sb.from("app_live_match").select("*");
     if (res.error) throw res.error;
     const matchs = res.data || [];
@@ -302,7 +338,6 @@
       rounds = r.data || []; cotes = c.data || []; vetos = v.data || []; series = se.data || [];
     }
     directCache = { matchs, rounds, cotes, vetos, series };
-    dessinerDirect();
     if (ficheDirectId !== null && !$("fiche").classList.contains("cache")) {
       const m = matchs.find((x) => x.fiche_id === ficheDirectId);
       if (m) remplirDetailDirect(m);
@@ -327,29 +362,6 @@
     noms.sort((a, b) => a.localeCompare(b));
     if (!noms.length) return null;
     return noms.map((n) => n + " " + ((se.victoires || {})[n] || 0)).join(" – ");
-  }
-
-  function dessinerDirect() {
-    const zone = $("liste-direct");
-    vider(zone);
-    const matchs = directCache.matchs.slice().sort((a, b) =>
-      String(b.dernier_round_le || "").localeCompare(String(a.dernier_round_le || "")));
-    const enCours = matchs.filter((m) => { const e = etatSerie(m); return e === "en_jeu" || e === "entre_cartes"; });
-    const autres = matchs.filter((m) => { const e = etatSerie(m); return e !== "en_jeu" && e !== "entre_cartes"; });
-    if (!matchs.length) {
-      const c = el("div", "carte");
-      c.appendChild(el("p", null, "Aucun match en direct pour le moment."));
-      c.appendChild(el("p", "discret petit", "Cette page se remplit dès qu'un match suivi sur HLTV démarre. Elle se rafraîchit toute seule toutes les 10 secondes."));
-      zone.appendChild(c);
-      return;
-    }
-    zone.appendChild(el("h3", "groupe-titre", "En cours (" + enCours.length + ")"));
-    if (!enCours.length) zone.appendChild(el("p", "discret petit", "Aucun match n'est marqué « en cours »."));
-    enCours.forEach((m) => zone.appendChild(carteDirect(m)));
-    if (autres.length) {
-      zone.appendChild(el("h3", "groupe-titre", "Récemment actifs (" + autres.length + ")"));
-      autres.forEach((m) => zone.appendChild(carteDirect(m)));
-    }
   }
 
   function carteDirect(m) {
@@ -944,6 +956,13 @@
     if (m.hltv_verifie_le) lignes.appendChild(el("p", "discret petit", "Dernière vérification HLTV : " + heureSeule(m.hltv_verifie_le)));
     if (!m.lie_bo3) lignes.appendChild(el("p", "discret petit", "Couverture bo3.gg : " + libelleCouverture(m.couverture_bo3)));
     zone.appendChild(lignes);
+    const lm = liveDe(m);
+    if (lm) {
+      const bt = el("button", "bouton secondaire", "Voir rounds, cotes et picks / bans");
+      bt.type = "button";
+      bt.addEventListener("click", () => ouvrirDirect(lm));
+      zone.appendChild(bt);
+    }
     $("fiche").classList.remove("cache");
   }
   function fermerFiche() { ficheDirectId = null; $("fiche").classList.add("cache"); }

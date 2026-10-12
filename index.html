@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=1.7">
+<link rel="stylesheet" href="style.css?v=1.8">
 </head>
 <body>
 
@@ -51,15 +51,9 @@
       <p class="discret petit">Seuils : liste PS3838 et bulletin 30 min, HLTV 60 min, bo3.gg 90 min, OddsPapi 10 h. « En retard » = jusqu'à 4 fois le seuil, au-delà « silencieux ». Cito est un secours : « en veille ».</p>
     </section>
 
-    <!-- En direct -->
-    <section id="page-direct" class="page cache">
-      <h2>Matchs en direct</h2>
-      <div id="liste-direct"></div>
-    </section>
-
     <!-- Matchs -->
     <section id="page-matchs" class="page cache">
-      <h2>Matchs du jour</h2>
+      <h2>Matchs</h2>
       <div id="liste-matchs"></div>
       <details class="carte">
         <summary>Matchs non liés à bo3.gg <span id="nb-non-lies" class="pastille"></span></summary>
@@ -148,13 +142,12 @@
       </details>
 
       <button id="btn-deconnexion" class="bouton secondaire">Se déconnecter</button>
-      <p class="discret petit">CS2'Orchestre v1.7</p>
+      <p class="discret petit">CS2'Orchestre v1.8</p>
     </section>
   </main>
 
   <nav class="onglets">
     <button data-page="collecte" class="actif"><span>📡</span>Collecte</button>
-    <button data-page="direct"><span>🔴</span>Direct</button>
     <button data-page="matchs"><span>🎮</span>Matchs</button>
     <button data-page="analyse" class="bientot"><span>🔎</span>Analyse</button>
     <button data-page="paris" class="bientot"><span>💶</span>Paris</button>
@@ -192,7 +185,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=1.7"></script>
-<script src="app.js?v=1.7"></script>
+<script src="config.js?v=1.8"></script>
+<script src="app.js?v=1.8"></script>
 </body>
 </html>

@@ -130,7 +130,7 @@
       return;
     }
 
-    const ordre = ["PS3838 liste", "PS3838 bulletin", "HLTV rounds", "HLTV probabilité", "bo3.gg", "OddsPapi", "Cito (secours)"];
+    const ordre = ["HLTV rounds", "bo3.gg", "OddsPapi"];
     data.sort((a, b) => ordre.indexOf(a.source) - ordre.indexOf(b.source));
 
     let nbRouge = 0, nbRetard = 0;
@@ -155,7 +155,7 @@
   }
 
   /* ---------- écran Matchs ---------- */
-  const SOURCES_STATUT = { bo3: "bo3.gg", hltv: "HLTV", ps3838: "PS3838" };
+  const SOURCES_STATUT = { bo3: "bo3.gg", hltv: "HLTV", oddspapi: "OddsPapi", heure: "l'heure de début" };
   const LIBELLES_MATCH = { en_cours: "en cours", a_venir: "à venir", termine: "terminé", inconnu: "inconnu" };
   const GROUPES = [
     { cle: "en_cours", titre: "En cours", ouvert: true },
@@ -191,26 +191,25 @@
     return st; // a_venir | termine | inconnu
   }
   function liveDe(m) {
-    return directCache ? (directCache.matchs || []).find((x) => x.fiche_id === m.fiche_id) || null : null;
+    if (!directCache || !m.hltv_match_id) return null;
+    return (directCache.matchs || []).find((x) => x.hltv_match_id === m.hltv_match_id) || null;
   }
   function aDuDirect() {
     return !!(directCache && (directCache.matchs || []).some((x) => { const e = etatSerie(x); return e === "en_jeu" || e === "entre_cartes"; }));
   }
 
   async function chargerMatchs() {
-    const [jour, nonLies] = await Promise.all([
-      sb.from("app_matchs_du_jour").select("*").order("start_time", { ascending: true }),
-      sb.from("app_matchs_non_lies").select("*").order("start_time", { ascending: false }).limit(60),
+    const [jour] = await Promise.all([
+      sb.from("app_matchs").select("*").order("start_time", { ascending: true }),
       chargerDonneesDirect()
     ]);
     if (jour.error) throw jour.error;
-    if (nonLies.error) throw nonLies.error;
 
     matchsCache = jour.data || [];
     const liste = $("liste-matchs");
     vider(liste);
     if (matchsCache.length === 0) {
-      liste.appendChild(el("div", "carte discret", "Aucun match aujourd'hui dans PS3838."));
+      liste.appendChild(el("div", "carte discret", "Aucun match entre hier et après-demain."));
     }
 
     const groupes = { direct: [], a_venir: [], termine: [], inconnu: [] };
@@ -243,21 +242,10 @@
     if (groupes.inconnu.length) {
       const d = el("details", "carte");
       d.appendChild(el("summary", null, "Sans confirmation (" + groupes.inconnu.length + ")"));
-      d.appendChild(el("p", "discret petit", "Heure de début passée, mais aucune source ne confirme que le match a eu lieu (pas de cotes en direct, pas de rounds, pas de résultat)."));
+      d.appendChild(el("p", "discret petit", "Heure de début passée, mais aucune source ne confirme que le match a eu lieu (pas de rounds HLTV, pas de résultat bo3.gg ni OddsPapi)."));
       groupes.inconnu.forEach(({ m }) => d.appendChild(carteMatch(m)));
       liste.appendChild(d);
     }
-
-    $("nb-non-lies").textContent = String((nonLies.data || []).length);
-    const zone = $("liste-non-lies");
-    vider(zone);
-    (nonLies.data || []).forEach((m) => {
-      const l = el("div", "ligne-non-lie");
-      l.appendChild(el("div", null, (m.team1 || "?") + " – " + (m.team2 || "?")));
-      l.appendChild(el("div", "discret petit",
-        (m.league || "ligue inconnue") + " · " + heurePar(m.start_time) + " · " + libelleCouverture(m.couverture_bo3)));
-      zone.appendChild(l);
-    });
   }
 
   function carteMatch(m) {
@@ -273,32 +261,13 @@
     return bouton;
   }
 
-  function libelleCouverture(c) {
-    return ({ hors_couverture: "hors couverture bo3.gg", a_verifier: "à vérifier", trou_a_corriger: "trou à corriger", liee: "liée", inconnue: "non évalué" })[c] || c || "non évalué";
-  }
-
-  // Libellé HLTV selon le statut écrit par l'orchestre (repli sur l'ancien indicateur si absent)
-  function etatHltv(m) {
-    const s = m.hltv_statut;
-    if (!s) return m.lie_hltv ? { t: "HLTV lié", c: "ok" } : { t: "HLTV non lié", c: "non" };
-    if (s === "lie") return { t: "HLTV lié", c: "ok" };
-    if (s === "page_ouverte") return { t: "HLTV page ouverte", c: "ok" };
-    if (s === "absent") return { t: "Absent de HLTV", c: "non" };
-    const notes = {
-      ambigu: "HLTV : plusieurs candidats",
-      academy_refuse: "HLTV : équipe Academy refusée",
-      heure_differente: "HLTV : heure différente",
-      pas_trouve: "Pas encore trouvé sur HLTV"
-    };
-    return { t: notes[m.hltv_note] || "HLTV à vérifier", c: "non" };
-  }
-
   function badgesLiaison(m) {
     const b = el("div", "badges");
     if (m.statut_match === "en_cours") b.appendChild(el("span", "badge live", "● En cours"));
-    b.appendChild(el("span", "badge " + (m.lie_bo3 ? "ok" : "non"), m.lie_bo3 ? "bo3.gg lié" : "bo3.gg non lié"));
-    const h = etatHltv(m);
-    b.appendChild(el("span", "badge " + h.c, h.t));
+    if (m.tier) b.appendChild(el("span", "badge", "Tier " + String(m.tier).toUpperCase()));
+    b.appendChild(el("span", "badge " + (m.lie_bo3 ? "ok" : "non"), m.lie_bo3 ? "bo3.gg" : "bo3.gg : non"));
+    b.appendChild(el("span", "badge " + (m.lie_hltv ? "ok" : "non"), m.lie_hltv ? "HLTV" : "HLTV : non"));
+    b.appendChild(el("span", "badge " + (m.lie_oddspapi ? "ok" : "non"), m.lie_oddspapi ? "OddsPapi" : "OddsPapi : non"));
     return b;
   }
 
@@ -323,23 +292,22 @@
   const ACTION_RESTANTE = "left_over";
 
   async function chargerDonneesDirect() {
-    const res = await sb.from("app_live_match").select("*");
+    const res = await sb.from("app_direct_match").select("*");
     if (res.error) throw res.error;
     const matchs = res.data || [];
-    let rounds = [], cotes = [], vetos = [], series = [];
+    let rounds = [], vetos = [], series = [];
     if (matchs.length) {
-      const [r, c, v, se] = await Promise.all([
-        sb.from("app_live_rounds").select("*").order("t", { ascending: true }),
-        sb.from("app_live_cotes").select("*"),
-        sb.from("app_live_veto").select("*"),
+      const [r, v, se] = await Promise.all([
+        sb.from("app_direct_rounds").select("*").order("t", { ascending: true }),
+        sb.from("app_direct_veto").select("*"),
         sb.from("app_live_serie").select("*")
       ]);
-      if (r.error) throw r.error; if (c.error) throw c.error; if (v.error) throw v.error; if (se.error) throw se.error;
-      rounds = r.data || []; cotes = c.data || []; vetos = v.data || []; series = se.data || [];
+      if (r.error) throw r.error; if (v.error) throw v.error; if (se.error) throw se.error;
+      rounds = r.data || []; vetos = v.data || []; series = se.data || [];
     }
-    directCache = { matchs, rounds, cotes, vetos, series };
+    directCache = { matchs, rounds, vetos, series };
     if (ficheDirectId !== null && !$("fiche").classList.contains("cache")) {
-      const m = matchs.find((x) => x.fiche_id === ficheDirectId);
+      const m = matchs.find((x) => x.maitre_id === ficheDirectId);
       if (m) remplirDetailDirect(m);
     }
   }
@@ -349,9 +317,9 @@
   function etatSerie(m) {
     const se = serieDe(m);
     if (se && se.serie_terminee) return "termine";
-    if (m.statut_match === "termine") return "termine";
-    if (se && se.entre_cartes && m.age_round_s !== null && m.age_round_s < 1800) return "entre_cartes";
-    if (m.statut_match === "en_cours") return "en_jeu";
+    const recent = m.age_round_s !== null && m.age_round_s !== undefined && m.age_round_s < 1800;
+    if (se && se.entre_cartes && recent) return "entre_cartes";
+    if (recent) return "en_jeu";
     return "inactif";
   }
   function scoreCartes(m) {
@@ -399,9 +367,9 @@
   }
 
   function ouvrirDirect(m) {
-    ficheDirectId = m.fiche_id;
+    ficheDirectId = m.maitre_id;
     $("fiche-titre").textContent = (m.team1 || "?") + " – " + (m.team2 || "?");
-    $("fiche-sous").textContent = "En direct · données HLTV et PS3838";
+    $("fiche-sous").textContent = "En direct · données HLTV";
     vider($("fiche-badges"));
     remplirDetailDirect(m);
     $("fiche").classList.remove("cache");
@@ -411,8 +379,7 @@
     const zone = $("fiche-detail");
     vider(zone);
     const rounds = directCache.rounds.filter((r) => r.hltv_match_id === m.hltv_match_id);
-    const cotes = directCache.cotes.filter((c) => c.fiche_id === m.fiche_id);
-    const veto = directCache.vetos.find((v) => v.hltv_match_id === m.hltv_match_id);
+        const veto = directCache.vetos.find((v) => v.hltv_match_id === m.hltv_match_id);
 
     // Score
     const sc = el("div", "carte");
@@ -457,43 +424,11 @@
     });
     zone.appendChild(fr);
 
-    // Cotes
+    // Cotes : OddsPapi n'a pas de direct, l'historique arrive après le match
     const co = el("div", "carte");
-    co.appendChild(el("strong", null, "Cotes PS3838 (30 dernières minutes)"));
-    if (!cotes.length) co.appendChild(el("p", "discret petit", "Aucune cote reçue récemment."));
-    else {
-      const plusRecent = Math.min.apply(null, cotes.map((c) => c.age_s));
-      const f = el("div", "fraicheur");
-      f.appendChild(el("span", "voyant " + classeFraicheur(plusRecent, 30, 120)));
-      f.appendChild(el("span", "discret petit", "dernière cote il y a " + ageLisible(plusRecent)));
-      co.appendChild(f);
-      const parMarche = {};
-      cotes.forEach((c) => { const k = c.market + " · " + nomPeriode(c.period); (parMarche[k] = parMarche[k] || []).push(c); });
-      Object.keys(parMarche).sort().forEach((k, i) => {
-        const d = el("details");
-        if (i === 0) d.open = true;
-        d.appendChild(el("summary", null, k + " (" + parMarche[k].length + ")"));
-        parMarche[k].sort((a, b) => Number(a.line || 0) - Number(b.line || 0)).slice(0, 40).forEach((c) => {
-          let t = (c.line !== null && c.line !== undefined ? "ligne " + c.line + " : " : "");
-          t += (c.c1 || "—") + " / " + (c.c2 || "—");
-          if (c.cn) t += " / nul " + c.cn;
-          t += " · " + ageLisible(c.age_s);
-          d.appendChild(el("p", "petit", t));
-        });
-        co.appendChild(d);
-      });
-    }
+    co.appendChild(el("strong", null, "Cotes"));
+    co.appendChild(el("p", "discret petit", "Pas de cotes en direct : l'historique des cotes (OddsPapi) est récupéré après la fin du match."));
     zone.appendChild(co);
-
-    // Probabilité HLTV (comparaison seulement)
-    const pr = el("div", "carte");
-    pr.appendChild(el("strong", null, "Probabilité HLTV (pour comparaison)"));
-    if (m.p_gauche === null || m.p_gauche === undefined) pr.appendChild(el("p", "discret petit", "Pas de probabilité lue."));
-    else {
-      pr.appendChild(el("p", null, (m.team_gauche || "?") + " " + pct(m.p_gauche) + " – " + pct(m.p_droite) + " " + (m.team_droite || "?")));
-      pr.appendChild(el("p", "discret petit", "Lue à " + heureSeule(m.proba_le) + ". Information stockée uniquement pour comparer, jamais utilisée pour décider."));
-    }
-    zone.appendChild(pr);
 
     // Picks et bans
     const vt = el("div", "carte");
@@ -693,7 +628,7 @@
         return;
       }
       if (Notification.permission === "denied") {
-        texte.textContent = "Notifications bloquées. Réactive-les dans Réglages de l'iPhone > Notifications > CS2'Orchestre.";
+        texte.textContent = "Notifications bloquées. Réactive-les dans Réglages de l'iPhone > Notifications > Sy(m)phon-e.";
         return;
       }
       const sub = await monAbonnement();
@@ -758,7 +693,7 @@
   const MODES = [
     { id: "lecture_seule", nom: "Lecture seule", desc: "Le robot observe et ne place aucun pari." },
     { id: "fictif", nom: "Paris fictifs", desc: "Le robot note des paris pour de faux, avec le capital fictif." },
-    { id: "reel", nom: "Réel", desc: "Argent réel sur PS3838. Demande ta confirmation." }
+    { id: "reel", nom: "Réel", desc: "Argent réel chez le bookmaker choisi. Demande ta confirmation." }
   ];
   const LIBELLES_CHAMP = { mode: "Mode", mise_max_pari: "Mise max par pari", mise_max_jour: "Mise max par jour",
     perte_max_jour: "Perte max par jour", arret_urgence: "Arrêt d'urgence" };
@@ -891,7 +826,7 @@
           return;
         }
         const ok = await confirmer("Passer en mode RÉEL ?",
-          "Le robot pourra engager de l'argent réel sur PS3838, dans la limite de " + g.mise_max_pari + " € par pari, " +
+          "Le robot pourra engager de l'argent réel, dans la limite de " + g.mise_max_pari + " € par pari, " +
           g.mise_max_jour + " € par jour et " + g.perte_max_jour + " € de perte par jour.", "RÉEL", "Passer en réel");
         if (!ok) return;
       } else if (id === "fictif") {
@@ -951,14 +886,15 @@
     const statut = m.statut_match || "inconnu";
     let txt = "Statut du match : " + (LIBELLES_MATCH[statut] || statut);
     if (m.statut_source) txt += " (source " + (SOURCES_STATUT[m.statut_source] || m.statut_source) + ")";
-    if (m.statut_maj_le) txt += ", mis à jour à " + heureSeule(m.statut_maj_le);
     lignes.appendChild(el("p", "discret petit", txt));
-    if (m.hltv_verifie_le) lignes.appendChild(el("p", "discret petit", "Dernière vérification HLTV : " + heureSeule(m.hltv_verifie_le)));
-    if (!m.lie_bo3) lignes.appendChild(el("p", "discret petit", "Couverture bo3.gg : " + libelleCouverture(m.couverture_bo3)));
+    if (m.score1 !== null && m.score1 !== undefined && m.score2 !== null && m.score2 !== undefined)
+      lignes.appendChild(el("p", null, "Résultat (bo3.gg) : " + (m.team1 || "?") + " " + m.score1 + " – " + m.score2 + " " + (m.team2 || "?")));
+    if (m.statut_match === "termine" && m.op_historique)
+      lignes.appendChild(el("p", "discret petit", "L'historique des cotes (OddsPapi) est disponible pour ce match."));
     zone.appendChild(lignes);
     const lm = liveDe(m);
     if (lm) {
-      const bt = el("button", "bouton secondaire", "Voir rounds, cotes et picks / bans");
+      const bt = el("button", "bouton secondaire", "Voir rounds et picks / bans");
       bt.type = "button";
       bt.addEventListener("click", () => ouvrirDirect(lm));
       zone.appendChild(bt);

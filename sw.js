@@ -1,12 +1,12 @@
-// CS2'Orchestre : récepteur de notifications (aucune mise en cache, rien d'autre)
+// Sy(m)phon-e : récepteur de notifications (aucune mise en cache, rien d'autre)
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 
 self.addEventListener("push", (event) => {
   let d = {};
   try { d = event.data ? event.data.json() : {}; }
-  catch (_) { d = { title: "CS2'Orchestre", body: event.data ? event.data.text() : "" }; }
-  event.waitUntil(self.registration.showNotification(d.title || "CS2'Orchestre", {
+  catch (_) { d = { title: "Sy(m)phon-e", body: event.data ? event.data.text() : "" }; }
+  event.waitUntil(self.registration.showNotification(d.title || "Sy(m)phon-e", {
     body: d.body || "",
     tag: d.tag || undefined,
     renotify: !!d.tag,

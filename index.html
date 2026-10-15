@@ -3,23 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>CS2'Orchestre</title>
+<title>Sy(m)phon-e-sport</title>
 <meta name="theme-color" content="#0f1419">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="CS2'Orchestre">
+<meta name="apple-mobile-web-app-title" content="Sy(m)phon-e">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=1.8">
+<link rel="stylesheet" href="style.css?v=2.0">
 </head>
 <body>
 
 <!-- ===== Écran de connexion ===== -->
 <section id="vue-connexion" class="cache">
   <form id="form-connexion" class="carte connexion">
-    <h1>CS2'Orchestre</h1>
+    <h1>Sy(m)phon-e-sport</h1>
     <p class="discret">Connexion réservée au propriétaire.</p>
     <label>E-mail
       <input id="champ-email" type="email" autocomplete="username" required>
@@ -35,7 +35,10 @@
 <!-- ===== Application ===== -->
 <div id="vue-app" class="cache">
   <header class="entete">
-    <h1 id="titre-page">Collecte</h1>
+    <div class="titres">
+      <div class="marque">Sy(m)phon-e-sport · CS2'Orchestre</div>
+      <h1 id="titre-page">Collecte</h1>
+    </div>
     <div class="entete-droite">
       <span id="maj" class="discret"></span>
       <button id="btn-alertes" class="bouton-mini cloche" title="Alertes" aria-label="Alertes">🔔<span id="pastille-alertes" class="pastille-rouge cache"></span></button>
@@ -48,17 +51,13 @@
     <section id="page-collecte" class="page">
       <div id="bandeau-global" class="bandeau"></div>
       <div id="liste-collecte"></div>
-      <p class="discret petit">Seuils : liste PS3838 et bulletin 30 min, HLTV 60 min, bo3.gg 90 min, OddsPapi 10 h. « En retard » = jusqu'à 4 fois le seuil, au-delà « silencieux ». Cito est un secours : « en veille ».</p>
+      <p class="discret petit">Seuils : HLTV 60 min, bo3.gg 90 min, OddsPapi 10 h. « En retard » = jusqu'à 4 fois le seuil, au-delà « silencieux ». HLTV passe « en veille » quand aucun match n'est en cours ou imminent.</p>
     </section>
 
     <!-- Matchs -->
     <section id="page-matchs" class="page cache">
       <h2>Matchs</h2>
       <div id="liste-matchs"></div>
-      <details class="carte">
-        <summary>Matchs non liés à bo3.gg <span id="nb-non-lies" class="pastille"></span></summary>
-        <div id="liste-non-lies"></div>
-      </details>
     </section>
 
     <!-- Alertes -->
@@ -142,7 +141,7 @@
       </details>
 
       <button id="btn-deconnexion" class="bouton secondaire">Se déconnecter</button>
-      <p class="discret petit">CS2'Orchestre v1.8</p>
+      <p class="discret petit">Sy(m)phon-e-sport v2.0 · CS2'Orchestre</p>
     </section>
   </main>
 
@@ -185,7 +184,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=1.8"></script>
-<script src="app.js?v=1.8"></script>
+<script src="config.js?v=2.0"></script>
+<script src="app.js?v=2.0"></script>
 </body>
 </html>

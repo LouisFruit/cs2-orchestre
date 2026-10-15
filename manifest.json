@@ -1,7 +1,7 @@
 {
-  "name": "CS2'Orchestre",
-  "short_name": "CS2'Orchestre",
-  "description": "Suivi du robot de paris CS2",
+  "name": "Sy(m)phon-e-sport",
+  "short_name": "Sy(m)phon-e",
+  "description": "Collecte et suivi des données e-sport (CS2'Orchestre)",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

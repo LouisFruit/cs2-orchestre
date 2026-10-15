@@ -149,3 +149,7 @@ details summary{cursor:pointer;font-weight:600}
 /* v2.0 : marque */
 .titres{display:flex;flex-direction:column;min-width:0}
 .marque{font-size:.7rem;color:var(--discret);letter-spacing:.03em}
+
+/* v2.1 : sources cliquables */
+.source.cliquable{cursor:pointer}
+.source .fleche{color:var(--discret);font-size:1.4rem;margin-left:6px}

@@ -130,14 +130,17 @@
       return;
     }
 
-    const ordre = ["HLTV rounds", "bo3.gg", "OddsPapi"];
+    const ordre = ["HLTV (direct)", "bo3.gg", "OddsPapi"];
     data.sort((a, b) => ordre.indexOf(a.source) - ordre.indexOf(b.source));
 
     let nbRouge = 0, nbRetard = 0;
     data.forEach((s) => {
       if (s.statut === "silencieux") nbRouge++;
       if (s.statut === "en_retard") nbRetard++;
-      const ligne = el("div", "source");
+      const ligne = el("div", "source cliquable");
+      ligne.setAttribute("role", "button");
+      ligne.tabIndex = 0;
+      ligne.addEventListener("click", () => ouvrirSource(s));
       ligne.appendChild(el("span", "voyant " + s.statut));
       const bloc = el("div");
       bloc.appendChild(el("div", "nom", s.source));
@@ -145,6 +148,7 @@
         "Dernière donnée : " + (s.derniere ? heurePar(s.derniere) + " (il y a " + dureeLisible(s.retard_min) + ")" : "aucune")));
       ligne.appendChild(bloc);
       ligne.appendChild(el("span", "statut " + s.statut, LIBELLES_STATUT[s.statut] || s.statut));
+      ligne.appendChild(el("span", "fleche", "›"));
       liste.appendChild(ligne);
     });
 
@@ -152,6 +156,54 @@
     if (nbRouge > 0) { b.className = "bandeau rouge"; b.textContent = nbRouge + " source(s) silencieuse(s)"; }
     else if (nbRetard > 0) { b.className = "bandeau alerte"; b.textContent = nbRetard + " source(s) en retard"; }
     else { b.className = "bandeau ok"; b.textContent = "Toutes les sources sont à jour"; }
+  }
+
+  /* ---------- détail d'une source : tout ce qu'elle collecte ---------- */
+  function nombre(n) { return n === null || n === undefined ? "—" : Number(n).toLocaleString("fr-FR"); }
+
+  async function ouvrirSource(src) {
+    ficheDirectId = null;
+    $("fiche-titre").textContent = src.source;
+    $("fiche-sous").textContent = "Ce que cette source collecte";
+    vider($("fiche-badges"));
+    const zone = $("fiche-detail");
+    vider(zone);
+    zone.appendChild(el("p", "discret petit", "Chargement…"));
+    $("fiche").classList.remove("cache");
+    try {
+      const [d, l] = await Promise.all([
+        sb.from("app_source_detail").select("*").eq("source", src.source).order("ordre", { ascending: true }),
+        sb.from("app_source_derniers").select("*").eq("source", src.source).order("t", { ascending: false })
+      ]);
+      if (d.error) throw d.error;
+      if (l.error) throw l.error;
+      vider(zone);
+      const etat = el("div", "carte");
+      etat.appendChild(el("span", "statut " + src.statut, LIBELLES_STATUT[src.statut] || src.statut));
+      etat.appendChild(el("p", "discret petit", "Dernière donnée : " + (src.derniere ? heurePar(src.derniere) + " (il y a " + dureeLisible(src.retard_min) + ")" : "aucune")));
+      zone.appendChild(etat);
+      (d.data || []).forEach((f) => {
+        const c = el("div", "carte");
+        c.appendChild(el("strong", null, f.famille));
+        c.appendChild(el("p", "discret petit", f.description));
+        let t = "Total : " + nombre(f.total);
+        if (f.dernieres_24h !== null && f.dernieres_24h !== undefined) t += " · 24 h : " + nombre(f.dernieres_24h);
+        c.appendChild(el("p", "petit", t));
+        if (f.derniere) c.appendChild(el("p", "discret petit", "Dernier ajout : " + heurePar(f.derniere)));
+        zone.appendChild(c);
+      });
+      const liste = el("div", "carte");
+      liste.appendChild(el("strong", null, "Derniers éléments reçus"));
+      if (!(l.data || []).length) liste.appendChild(el("p", "discret petit", "Rien pour le moment."));
+      (l.data || []).forEach((x) => {
+        liste.appendChild(el("p", "petit", x.libelle));
+        liste.appendChild(el("p", "discret petit", (x.detail ? x.detail + " · " : "") + heurePar(x.t)));
+      });
+      zone.appendChild(liste);
+    } catch (err) {
+      vider(zone);
+      zone.appendChild(el("p", "erreur", "Lecture impossible : " + (err.message || err)));
+    }
   }
 
   /* ---------- écran Matchs ---------- */

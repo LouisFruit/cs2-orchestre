@@ -116,6 +116,14 @@
   }
 
   /* ---------- écran Collecte ---------- */
+  // Noms affichés des trois sources (la base garde ses noms internes)
+  const NOMS_SOURCES = { "HLTV (direct)": "HLTV", "bo3.gg": "BO3GG", "OddsPapi": "ODDSPAPI" };
+  const ROLES_SOURCES = {
+    "HLTV (direct)": "Le déroulé du match en direct : rounds, kills, bombe.",
+    "bo3.gg": "Les matchs en différé : résultats, cartes, rounds, stats des joueurs.",
+    "OddsPapi": "Les cotes en différé : historique des prix, récupéré après le match."
+  };
+  function nomSource(n) { return NOMS_SOURCES[n] || n; }
   const LIBELLES_STATUT = { ok: "OK", en_retard: "En retard", silencieux: "Silencieux", en_veille: "En veille" };
 
   async function chargerCollecte() {
@@ -143,9 +151,12 @@
       ligne.addEventListener("click", () => ouvrirSource(s));
       ligne.appendChild(el("span", "voyant " + s.statut));
       const bloc = el("div");
-      bloc.appendChild(el("div", "nom", s.source));
+      bloc.appendChild(el("div", "nom", nomSource(s.source)));
+      if (ROLES_SOURCES[s.source]) bloc.appendChild(el("div", "role-source", ROLES_SOURCES[s.source]));
       bloc.appendChild(el("div", "detail",
         "Dernière donnée : " + (s.derniere ? heurePar(s.derniere) + " (il y a " + dureeLisible(s.retard_min) + ")" : "aucune")));
+      if (s.seuil_min !== null && s.seuil_min !== undefined)
+        bloc.appendChild(el("div", "detail", "Seuil : " + dureeLisible(s.seuil_min) + (s.seuil_nuit_min ? " (" + dureeLisible(s.seuil_nuit_min) + " la nuit)" : "")));
       ligne.appendChild(bloc);
       ligne.appendChild(el("span", "statut " + s.statut, LIBELLES_STATUT[s.statut] || s.statut));
       ligne.appendChild(el("span", "fleche", "›"));
@@ -163,8 +174,8 @@
 
   async function ouvrirSource(src) {
     ficheDirectId = null;
-    $("fiche-titre").textContent = src.source;
-    $("fiche-sous").textContent = "Ce que cette source collecte";
+    $("fiche-titre").textContent = nomSource(src.source);
+    $("fiche-sous").textContent = ROLES_SOURCES[src.source] || "Ce que cette source collecte";
     vider($("fiche-badges"));
     const zone = $("fiche-detail");
     vider(zone);
@@ -207,7 +218,7 @@
   }
 
   /* ---------- écran Matchs ---------- */
-  const SOURCES_STATUT = { bo3: "bo3.gg", hltv: "HLTV", oddspapi: "OddsPapi", heure: "l'heure de début" };
+  const SOURCES_STATUT = { bo3: "BO3GG", hltv: "HLTV", oddspapi: "ODDSPAPI", heure: "l'heure de début" };
   const LIBELLES_MATCH = { en_cours: "en cours", a_venir: "à venir", termine: "terminé", inconnu: "inconnu" };
   const GROUPES = [
     { cle: "en_cours", titre: "En cours", ouvert: true },
@@ -294,7 +305,7 @@
     if (groupes.inconnu.length) {
       const d = el("details", "carte");
       d.appendChild(el("summary", null, "Sans confirmation (" + groupes.inconnu.length + ")"));
-      d.appendChild(el("p", "discret petit", "Heure de début passée, mais aucune source ne confirme que le match a eu lieu (pas de rounds HLTV, pas de résultat bo3.gg ni OddsPapi)."));
+      d.appendChild(el("p", "discret petit", "Heure de début passée, mais aucune source ne confirme que le match a eu lieu (pas de rounds HLTV, pas de résultat BO3GG ni ODDSPAPI)."));
       groupes.inconnu.forEach(({ m }) => d.appendChild(carteMatch(m)));
       liste.appendChild(d);
     }
@@ -317,9 +328,9 @@
     const b = el("div", "badges");
     if (m.statut_match === "en_cours") b.appendChild(el("span", "badge live", "● En cours"));
     if (m.tier) b.appendChild(el("span", "badge", "Tier " + String(m.tier).toUpperCase()));
-    b.appendChild(el("span", "badge " + (m.lie_bo3 ? "ok" : "non"), m.lie_bo3 ? "bo3.gg" : "bo3.gg : non"));
+    b.appendChild(el("span", "badge " + (m.lie_bo3 ? "ok" : "non"), m.lie_bo3 ? "BO3GG" : "BO3GG : non"));
     b.appendChild(el("span", "badge " + (m.lie_hltv ? "ok" : "non"), m.lie_hltv ? "HLTV" : "HLTV : non"));
-    b.appendChild(el("span", "badge " + (m.lie_oddspapi ? "ok" : "non"), m.lie_oddspapi ? "OddsPapi" : "OddsPapi : non"));
+    b.appendChild(el("span", "badge " + (m.lie_oddspapi ? "ok" : "non"), m.lie_oddspapi ? "ODDSPAPI" : "ODDSPAPI : non"));
     return b;
   }
 
@@ -479,7 +490,7 @@
     // Cotes : OddsPapi n'a pas de direct, l'historique arrive après le match
     const co = el("div", "carte");
     co.appendChild(el("strong", null, "Cotes"));
-    co.appendChild(el("p", "discret petit", "Pas de cotes en direct : l'historique des cotes (OddsPapi) est récupéré après la fin du match."));
+    co.appendChild(el("p", "discret petit", "Pas de cotes en direct : l'historique des cotes (ODDSPAPI) est récupéré après la fin du match."));
     zone.appendChild(co);
 
     // Picks et bans
@@ -944,9 +955,9 @@
     if (m.statut_source) txt += " (source " + (SOURCES_STATUT[m.statut_source] || m.statut_source) + ")";
     lignes.appendChild(el("p", "discret petit", txt));
     if (m.score1 !== null && m.score1 !== undefined && m.score2 !== null && m.score2 !== undefined)
-      lignes.appendChild(el("p", null, "Résultat (bo3.gg) : " + (m.team1 || "?") + " " + m.score1 + " – " + m.score2 + " " + (m.team2 || "?")));
+      lignes.appendChild(el("p", null, "Résultat (BO3GG) : " + (m.team1 || "?") + " " + m.score1 + " – " + m.score2 + " " + (m.team2 || "?")));
     if (m.statut_match === "termine" && m.op_historique)
-      lignes.appendChild(el("p", "discret petit", "L'historique des cotes (OddsPapi) est disponible pour ce match."));
+      lignes.appendChild(el("p", "discret petit", "L'historique des cotes (ODDSPAPI) est disponible pour ce match."));
     zone.appendChild(lignes);
     const lm = liveDe(m);
     if (lm) {

@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=2.2">
+<link rel="stylesheet" href="style.css?v=2.3">
 </head>
 <body>
 
@@ -52,7 +52,15 @@
       <div id="bandeau-global" class="bandeau"></div>
       <div id="liste-collecte"></div>
       <p class="discret petit">Touche une source pour voir tout ce qu'elle collecte.</p>
-      <p class="discret petit">Seuils : HLTV (direct) 60 min, bo3.gg 90 min, OddsPapi 10 h. « En retard » = jusqu'à 4 fois le seuil, au-delà « silencieux ». HLTV passe « en veille » quand aucun match n'est en cours ou imminent.</p>
+      <div class="carte aide-seuils">
+        <strong>Comment lire les voyants</strong>
+        <p class="petit">Chaque source a un <b>seuil</b> : le temps maximum sans nouvelle donnée avant qu'on s'inquiète.</p>
+        <p class="petit">🟢 <b>OK</b> : la dernière donnée est plus récente que le seuil.<br>
+        🟠 <b>En retard</b> : elle a entre 1 et 4 fois le seuil.<br>
+        🔴 <b>Silencieux</b> : elle a plus de 4 fois le seuil, la source est probablement en panne.<br>
+        ⚪ <b>En veille</b> : rien à surveiller pour l'instant (HLTV hors des matchs).</p>
+        <p class="petit">Seuils (d'après les rythmes réels) : <b>HLTV</b> 45 min, pour tenir compte des pauses d'un BO5 ; <b>BO3GG</b> 4 h, et 8 h la nuit (de 23h à 10h) car il y a peu de matchs ; <b>ODDSPAPI</b> 12 h, mesuré sur la dernière cote reçue.</p>
+      </div>
     </section>
 
     <!-- Matchs -->
@@ -142,7 +150,7 @@
       </details>
 
       <button id="btn-deconnexion" class="bouton secondaire">Se déconnecter</button>
-      <p class="discret petit">Sy(m)phon-e-sport v2.2 · CS2'Orchestre</p>
+      <p class="discret petit">Sy(m)phon-e-sport v2.3 · CS2'Orchestre</p>
     </section>
   </main>
 
@@ -185,7 +193,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=2.2"></script>
-<script src="app.js?v=2.2"></script>
+<script src="config.js?v=2.3"></script>
+<script src="app.js?v=2.3"></script>
 </body>
 </html>

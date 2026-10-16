@@ -512,13 +512,14 @@
 
   async function majPastille() {
     try {
-      const r = await sb.from("app_notifications").select("niveau").is("lu_le", null).limit(100);
+      const r = await sb.from("app_notifications").select("niveau").is("lu_le", null).limit(200);
       if (r.error) return;
-      const n = (r.data || []).length;
+      const pannes = (r.data || []).filter((x) => x.niveau !== "info");
+      const n = pannes.length;
       const p = $("pastille-alertes");
       p.textContent = n >= 100 ? "99+" : String(n);
       p.classList.toggle("cache", n === 0);
-      p.classList.toggle("critique", (r.data || []).some((x) => x.niveau === "critique"));
+      p.classList.toggle("critique", pannes.some((x) => x.niveau === "critique"));
     } catch (e) { /* la cloche est facultative */ }
   }
 
@@ -535,7 +536,8 @@
     // filtres
     const f = $("filtres-alertes");
     vider(f);
-    [["tous", "Toutes"], ["critique", "Critiques"], ["important", "Importantes"], ["info", "Infos"]].forEach(([id, nom]) => {
+    const nbInfos = alertesCache.filter((a) => a.niveau === "info" && !a.lu_le).length;
+    [["tous", "Pannes"], ["critique", "Critiques"], ["important", "Importantes"], ["info", "Infos" + (nbInfos ? " (" + nbInfos + ")" : "")]].forEach(([id, nom]) => {
       const b = el("button", "filtre" + (filtreAlertes === id ? " actif" : ""), nom);
       b.type = "button";
       b.addEventListener("click", () => { filtreAlertes = id; dessinerAlertes(); });
@@ -544,7 +546,7 @@
     // liste
     const zone = $("liste-alertes");
     vider(zone);
-    const liste = alertesCache.filter((a) => filtreAlertes === "tous" || a.niveau === filtreAlertes);
+    const liste = alertesCache.filter((a) => filtreAlertes === "tous" ? a.niveau !== "info" : a.niveau === filtreAlertes);
     if (!liste.length) {
       zone.appendChild(el("p", "discret", alertesCache.length ? "Aucune alerte dans ce filtre." : "Aucune alerte pour le moment."));
       return;
@@ -585,6 +587,8 @@
   const GROUPES_NOTIF = [["critique", "Critiques"], ["important", "Importantes"], ["info", "Infos"]];
   const MODES_NOTIF = [["auto", "Auto"], ["push", "Push"], ["lecture", "Lecture"]];
   let reglageNotifCache = [];
+  // Alertes de sources abandonnées (PS3838 fermé le 14/10) : on ne les affiche plus
+  const FAMILLES_MORTES = /^(ps3838_|lecteur_|bulletin_)/;
 
   $("btn-reglage-notif").addEventListener("click", () => aller("notif"));
   $("btn-notif-retour").addEventListener("click", () => aller("alertes"));
@@ -599,7 +603,7 @@
   async function chargerReglageNotif() {
     const r = await sb.from("notif_reglages").select("*").order("libelle", { ascending: true });
     if (r.error) throw r.error;
-    reglageNotifCache = r.data || [];
+    reglageNotifCache = (r.data || []).filter((x) => !FAMILLES_MORTES.test(x.famille));
     dessinerReglageNotif();
   }
 

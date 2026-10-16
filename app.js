@@ -167,6 +167,94 @@
     if (nbRouge > 0) { b.className = "bandeau rouge"; b.textContent = nbRouge + " source(s) silencieuse(s)"; }
     else if (nbRetard > 0) { b.className = "bandeau alerte"; b.textContent = nbRetard + " source(s) en retard"; }
     else { b.className = "bandeau ok"; b.textContent = "Toutes les sources sont à jour"; }
+    await chargerLiaison();
+  }
+
+  /* ---------- liaison des matchs entre les trois sources ---------- */
+  function pourcent(a, b) { return b > 0 ? Math.round((100 * a) / b) : null; }
+  function classePct(p) { return p === null ? "en_veille" : p >= 90 ? "ok" : p >= 60 ? "en_retard" : "silencieux"; }
+
+  async function chargerLiaison() {
+    const zone = $("carte-liaison");
+    try {
+      const [n, e] = await Promise.all([
+        sb.from("app_liaison_niveaux").select("*").order("ordre", { ascending: true }),
+        sb.from("app_liaison_etat").select("*")
+      ]);
+      if (n.error) throw n.error;
+      if (e.error) throw e.error;
+      vider(zone);
+      const etat = (e.data || [])[0] || null;
+      const carte = el("div", "carte liaison");
+      const tete = el("div", "entete-liaison");
+      const panne = etat && etat.statut === "panne";
+      tete.appendChild(el("span", "voyant " + (panne ? "silencieux" : "ok")));
+      tete.appendChild(el("strong", null, "Liaison des matchs"));
+      tete.appendChild(el("span", "statut " + (panne ? "silencieux" : "ok"), panne ? "En panne" : "OK"));
+      carte.appendChild(tete);
+      carte.appendChild(el("p", "discret petit",
+        "Un même match retrouvé dans BO3GG, ODDSPAPI et HLTV. Dernière mise à jour des liaisons : " +
+        (etat && etat.derniere_maj ? heurePar(etat.derniere_maj) + " (il y a " + dureeLisible(etat.retard_min) + ")" : "jamais") + "."));
+      if (panne) carte.appendChild(el("p", "petit", "La liaison automatique a échoué récemment (voir les alertes) : les nouveaux matchs ne sont plus reliés tant que ce n'est pas corrigé."));
+
+      (n.data || []).forEach((r) => {
+        const p = pourcent(r.relies_bo3_op, r.total);
+        const classe = classePct(p);
+        const ligne = el("div", "niveau");
+        ligne.setAttribute("role", "button");
+        ligne.tabIndex = 0;
+        ligne.addEventListener("click", () => ouvrirLiaison(r));
+        const corps = el("div", "corps");
+        corps.appendChild(el("div", "nom", r.niveau));
+        corps.appendChild(el("div", "detail discret petit", nombre(r.total) + " matchs · BO3GG ↔ ODDSPAPI"));
+        let sources = "BO3GG " + (pourcent(r.avec_bo3, r.total) ?? "—") + " % · ODDSPAPI " + (pourcent(r.avec_op, r.total) ?? "—") + " %";
+        if (r.hltv_attendus > 0) sources += " · HLTV " + r.relies_hltv + "/" + r.hltv_attendus;
+        corps.appendChild(el("div", "detail discret petit", sources));
+        const barre = el("div", "barre");
+        const rempli = el("span", classe);
+        rempli.style.width = (p === null ? 0 : p) + "%";
+        barre.appendChild(rempli);
+        corps.appendChild(barre);
+        ligne.appendChild(corps);
+        ligne.appendChild(el("span", "pct " + classe, p === null ? "—" : p + " %"));
+        ligne.appendChild(el("span", "fleche", "›"));
+        carte.appendChild(ligne);
+      });
+      carte.appendChild(el("p", "discret petit", "Matchs des 30 derniers jours, commencés il y a plus de 6 h. Touche un niveau pour voir les matchs non reliés."));
+      zone.appendChild(carte);
+    } catch (err) {
+      vider(zone);
+      zone.appendChild(el("p", "discret petit", "Liaison des matchs : lecture impossible (" + (err.message || err) + ")."));
+    }
+  }
+
+  async function ouvrirLiaison(r) {
+    ficheDirectId = null;
+    $("fiche-titre").textContent = r.niveau + " : matchs non reliés";
+    $("fiche-sous").textContent = "Il manque au moins une source pour ces matchs (les plus récents d'abord).";
+    vider($("fiche-badges"));
+    const zone = $("fiche-detail");
+    vider(zone);
+    zone.appendChild(el("p", "discret petit", "Chargement…"));
+    $("fiche").classList.remove("cache");
+    try {
+      const l = await sb.from("app_liaison_non_relies").select("*").eq("niveau", r.niveau).order("debut", { ascending: false });
+      if (l.error) throw l.error;
+      vider(zone);
+      const lignes = l.data || [];
+      if (!lignes.length) { zone.appendChild(el("p", "discret", "Aucun match non relié.")); return; }
+      lignes.forEach((x) => {
+        const c = el("div", "carte");
+        c.appendChild(el("strong", null, (x.equipe1_nom || "?") + " – " + (x.equipe2_nom || "?")));
+        c.appendChild(el("p", "discret petit", (x.tournoi ? x.tournoi + " · " : "") + heurePar(x.debut)));
+        c.appendChild(el("p", "petit", "Manque : " + (x.manque || "—")));
+        zone.appendChild(c);
+      });
+      if (lignes.length >= 60) zone.appendChild(el("p", "discret petit", "Les 60 plus récents sont affichés."));
+    } catch (err) {
+      vider(zone);
+      zone.appendChild(el("p", "erreur", "Lecture impossible : " + (err.message || err)));
+    }
   }
 
   /* ---------- détail d'une source : tout ce qu'elle collecte ---------- */

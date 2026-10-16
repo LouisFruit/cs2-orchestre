@@ -158,3 +158,16 @@ details summary{cursor:pointer;font-weight:600}
 .source .nom{font-size:1.05rem;letter-spacing:.02em}
 .source .role-source{font-size:.85rem;margin:2px 0}
 .aide-seuils p{margin:6px 0}
+
+/* v2.4 : liaison des matchs */
+.liaison .entete-liaison{display:flex;align-items:center;gap:12px}
+.liaison .entete-liaison .statut{margin-left:auto;font-size:.8rem;text-transform:uppercase;letter-spacing:.03em}
+.liaison .niveau{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--bord);cursor:pointer}
+.liaison .niveau .nom{font-weight:600}
+.liaison .niveau .pct{margin-left:auto;min-width:4.6rem;text-align:right;font-size:1.25rem;font-weight:700}
+.liaison .pct.ok{color:var(--ok)} .liaison .pct.en_retard{color:var(--retard)} .liaison .pct.silencieux{color:var(--rouge)}
+.liaison .niveau .fleche{color:var(--discret);font-size:1.4rem}
+.liaison .barre{height:6px;border-radius:3px;background:var(--bord);margin-top:6px;overflow:hidden}
+.liaison .barre span{display:block;height:100%;background:var(--ok)}
+.liaison .barre span.en_retard{background:var(--retard)} .liaison .barre span.silencieux{background:var(--rouge)}
+.liaison .niveau .corps{flex:1;min-width:0}

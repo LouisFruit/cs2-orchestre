@@ -139,12 +139,17 @@
     }
 
     const ordre = ["HLTV (direct)", "bo3.gg", "OddsPapi"];
-    data.sort((a, b) => ordre.indexOf(a.source) - ordre.indexOf(b.source));
+    const estExport = (s) => /^Export /.test(s.source);
+    const exportsLignes = data.filter(estExport);
+    const sources = data.filter((s) => !estExport(s));
+    sources.sort((a, b) => ordre.indexOf(a.source) - ordre.indexOf(b.source));
 
     let nbRouge = 0, nbRetard = 0;
     data.forEach((s) => {
       if (s.statut === "silencieux") nbRouge++;
       if (s.statut === "en_retard") nbRetard++;
+    });
+    sources.forEach((s) => {
       const ligne = el("div", "source cliquable");
       ligne.setAttribute("role", "button");
       ligne.tabIndex = 0;
@@ -163,10 +168,36 @@
       liste.appendChild(ligne);
     });
 
+    // Envois vers l'analyse (exports écrits sur le PC) : groupe à part
+    if (exportsLignes.length) {
+      const carteEx = el("div", "carte exports");
+      carteEx.appendChild(el("strong", null, "Envois vers l'analyse"));
+      carteEx.appendChild(el("p", "discret petit", "Les fichiers que la collecte prépare sur ton PC pour l'analyse."));
+      exportsLignes.forEach((s) => {
+        const l = el("div", "niveau");
+        l.setAttribute("role", "button");
+        l.tabIndex = 0;
+        l.addEventListener("click", () => ouvrirExport(s));
+        l.appendChild(el("span", "voyant " + s.statut));
+        const corps = el("div", "corps");
+        corps.appendChild(el("div", "nom", nomExport(s.source)));
+        corps.appendChild(el("div", "detail discret petit",
+          "Dernier envoi réussi : " + (s.derniere ? heurePar(s.derniere) + " (il y a " + dureeLisible(s.retard_min) + ")" : "aucun")));
+        if (s.echec) corps.appendChild(el("div", "detail petit", "Le dernier passage a échoué."));
+        if (s.seuil_min !== null && s.seuil_min !== undefined)
+          corps.appendChild(el("div", "detail discret petit", "Seuil : " + dureeLisible(s.seuil_min)));
+        l.appendChild(corps);
+        l.appendChild(el("span", "statut " + s.statut, LIBELLES_STATUT[s.statut] || s.statut));
+        l.appendChild(el("span", "fleche", "›"));
+        carteEx.appendChild(l);
+      });
+      liste.appendChild(carteEx);
+    }
+
     const b = $("bandeau-global");
-    if (nbRouge > 0) { b.className = "bandeau rouge"; b.textContent = nbRouge + " source(s) silencieuse(s)"; }
-    else if (nbRetard > 0) { b.className = "bandeau alerte"; b.textContent = nbRetard + " source(s) en retard"; }
-    else { b.className = "bandeau ok"; b.textContent = "Toutes les sources sont à jour"; }
+    if (nbRouge > 0) { b.className = "bandeau rouge"; b.textContent = nbRouge + " source(s) ou envoi(s) silencieux"; }
+    else if (nbRetard > 0) { b.className = "bandeau alerte"; b.textContent = nbRetard + " source(s) ou envoi(s) en retard"; }
+    else { b.className = "bandeau ok"; b.textContent = "Toutes les sources et tous les envois sont à jour"; }
     await chargerLiaison();
   }
 
@@ -257,7 +288,28 @@
     }
   }
 
+  /* ---------- détail d'un envoi vers l'analyse ---------- */
+  function ouvrirExport(s) {
+    ficheDirectId = null;
+    $("fiche-titre").textContent = nomExport(s.source);
+    $("fiche-sous").textContent = "Envoi vers l'analyse : fichier préparé sur ton PC";
+    vider($("fiche-badges"));
+    const zone = $("fiche-detail");
+    vider(zone);
+    const c = el("div", "carte");
+    c.appendChild(el("span", "statut " + s.statut, LIBELLES_STATUT[s.statut] || s.statut));
+    c.appendChild(el("p", "petit", "Dernier envoi réussi : " + (s.derniere ? heurePar(s.derniere) + " (il y a " + dureeLisible(s.retard_min) + ")" : "aucun")));
+    if (s.derniere_tentative) c.appendChild(el("p", "petit", "Dernière tentative : " + heurePar(s.derniere_tentative) + (s.echec ? " (échec)" : " (réussie)")));
+    if (s.lignes !== null && s.lignes !== undefined) c.appendChild(el("p", "petit", "Lignes exportées : " + nombre(s.lignes)));
+    if (s.message) c.appendChild(el("p", "discret petit", s.message));
+    if (s.seuil_min !== null && s.seuil_min !== undefined)
+      c.appendChild(el("p", "discret petit", "Seuil : " + dureeLisible(s.seuil_min) + ". Un échec du dernier passage met l'envoi « en retard » tout de suite."));
+    zone.appendChild(c);
+    $("fiche").classList.remove("cache");
+  }
+
   /* ---------- détail d'une source : tout ce qu'elle collecte ---------- */
+  function nomExport(src) { const n = src.replace(/^Export /, ""); return n.charAt(0).toUpperCase() + n.slice(1); }
   function nombre(n) { return n === null || n === undefined ? "—" : Number(n).toLocaleString("fr-FR"); }
 
   async function ouvrirSource(src) {

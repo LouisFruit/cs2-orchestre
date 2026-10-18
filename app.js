@@ -185,7 +185,7 @@
           "Dernier envoi réussi : " + (s.derniere ? heurePar(s.derniere) + " (il y a " + dureeLisible(s.retard_min) + ")" : "aucun")));
         if (s.echec) corps.appendChild(el("div", "detail petit", "Le dernier passage a échoué."));
         if (s.seuil_min !== null && s.seuil_min !== undefined)
-          corps.appendChild(el("div", "detail discret petit", "Seuil : " + dureeLisible(s.seuil_min)));
+          corps.appendChild(el("div", "detail discret petit", "Seuil : " + dureeLisible(s.seuil_min) + (s.seuil_nuit_min ? " (" + dureeLisible(s.seuil_nuit_min) + " la nuit)" : "")));
         l.appendChild(corps);
         l.appendChild(el("span", "statut " + s.statut, LIBELLES_STATUT[s.statut] || s.statut));
         l.appendChild(el("span", "fleche", "›"));
@@ -303,7 +303,7 @@
     if (s.lignes !== null && s.lignes !== undefined) c.appendChild(el("p", "petit", "Lignes exportées : " + nombre(s.lignes)));
     if (s.message) c.appendChild(el("p", "discret petit", s.message));
     if (s.seuil_min !== null && s.seuil_min !== undefined)
-      c.appendChild(el("p", "discret petit", "Seuil : " + dureeLisible(s.seuil_min) + ". Un échec du dernier passage met l'envoi « en retard » tout de suite."));
+      c.appendChild(el("p", "discret petit", "Seuil : " + dureeLisible(s.seuil_min) + (s.seuil_nuit_min ? " (" + dureeLisible(s.seuil_nuit_min) + " la nuit)" : "") + ". Un échec du dernier passage met l'envoi « en retard » tout de suite."));
     zone.appendChild(c);
     $("fiche").classList.remove("cache");
   }

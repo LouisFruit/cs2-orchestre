@@ -251,11 +251,65 @@
         ligne.appendChild(el("span", "fleche", "›"));
         carte.appendChild(ligne);
       });
+      // Doublons : un même match en deux lignes (facultatif : rien ne s'affiche si la vue ne répond pas)
+      let dbl = null;
+      try {
+        const d = await sb.from("app_liaison_doublons").select("*");
+        if (!d.error && d.data && d.data[0]) dbl = d.data[0];
+      } catch (e2) { dbl = null; }
+      if (dbl) {
+        const nb = Number(dbl.nb_doublons) || 0;
+        const ligne = el("div", "niveau");
+        ligne.setAttribute("role", "button");
+        ligne.tabIndex = 0;
+        const corps = el("div", "corps");
+        corps.appendChild(el("div", "nom", "Doublons"));
+        corps.appendChild(el("div", "detail discret petit",
+          (nb === 0 ? "Aucun match en double" : nb + (nb > 1 ? " matchs existent en double" : " match existe en double")) +
+          (dbl.maj_le ? " · vérifié à " + heureSeule(dbl.maj_le) : "")));
+        ligne.appendChild(corps);
+        ligne.appendChild(el("span", "pct " + (nb === 0 ? "ok" : "en_retard"), String(nb)));
+        if (nb > 0) {
+          ligne.appendChild(el("span", "fleche", "›"));
+          ligne.addEventListener("click", ouvrirDoublons);
+        } else ligne.style.cursor = "default";
+        carte.appendChild(ligne);
+      }
       carte.appendChild(el("p", "discret petit", "Matchs des 30 derniers jours, commencés il y a plus de 6 h. Touche un niveau pour voir les matchs non reliés."));
       zone.appendChild(carte);
     } catch (err) {
       vider(zone);
       zone.appendChild(el("p", "discret petit", "Liaison des matchs : lecture impossible (" + (err.message || err) + ")."));
+    }
+  }
+
+  async function ouvrirDoublons() {
+    ficheDirectId = null;
+    $("fiche-titre").textContent = "Matchs en double";
+    $("fiche-sous").textContent = "Même paire d'équipes, deux lignes qui n'ont aucune source en commun.";
+    vider($("fiche-badges"));
+    const zone = $("fiche-detail");
+    vider(zone);
+    zone.appendChild(el("p", "discret petit", "Chargement…"));
+    $("fiche").classList.remove("cache");
+    try {
+      const l = await sb.from("app_liaison_doublons_liste").select("*").order("rang", { ascending: true });
+      if (l.error) throw l.error;
+      vider(zone);
+      const lignes = l.data || [];
+      if (!lignes.length) { zone.appendChild(el("p", "discret", "Aucun doublon.")); return; }
+      lignes.forEach((x) => {
+        const c = el("div", "carte");
+        c.appendChild(el("strong", null, (x.equipe1_nom || "?") + " – " + (x.equipe2_nom || "?")));
+        c.appendChild(el("p", "petit", "Ligne " + x.id_a + " : " + heurePar(x.debut_a) + " · sources : " + (x.sources_a || "—")));
+        c.appendChild(el("p", "petit", "Ligne " + x.id_b + " : " + heurePar(x.debut_b) + " · sources : " + (x.sources_b || "—")));
+        c.appendChild(el("p", "discret petit", "Écart d'heure : " + (x.ecart_min === null || x.ecart_min === undefined ? "—" : dureeLisible(x.ecart_min))));
+        zone.appendChild(c);
+      });
+      if (lignes.length >= 60) zone.appendChild(el("p", "discret petit", "Les 60 premiers sont affichés."));
+    } catch (err) {
+      vider(zone);
+      zone.appendChild(el("p", "erreur", "Lecture impossible : " + (err.message || err)));
     }
   }
 

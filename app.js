@@ -357,15 +357,35 @@
     }
   }
 
+  /* ---------- v2.6 : équipes, couleurs, noms ---------- */
+  function norm(s) { return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]/g, ""); }
+  function memeEquipe(a, b) {
+    const x = norm(a), y = norm(b);
+    if (!x || !y) return false;
+    return x === y || (x.length >= 4 && y.length >= 4 && (x.indexOf(y) !== -1 || y.indexOf(x) !== -1));
+  }
+  // "a" = équipe 1 du match (vert), "b" = équipe 2 (violet), "" = inconnue
+  function rangEquipe(nom, t1, t2) {
+    if (memeEquipe(nom, t1)) return "a";
+    if (memeEquipe(nom, t2)) return "b";
+    return "";
+  }
+  function nomCarte(c) {
+    if (!c) return "carte ?";
+    const s = String(c).replace(/^de_/i, "");
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+  // Scores (équipe 1, équipe 2) à partir d'un score donné par camp
+  function orienter(t1, t2, ctNom, sc, tNom, st) {
+    const rc = rangEquipe(ctNom, t1, t2), rt = rangEquipe(tNom, t1, t2);
+    if (rc === "a" || rt === "b") return { s1: sc, s2: st, camp1: "CT", camp2: "T" };
+    if (rc === "b" || rt === "a") return { s1: st, s2: sc, camp1: "T", camp2: "CT" };
+    return null;
+  }
+
   /* ---------- écran Matchs ---------- */
   const SOURCES_STATUT = { bo3: "BO3GG", hltv: "HLTV", oddspapi: "ODDSPAPI", heure: "l'heure de début" };
   const LIBELLES_MATCH = { en_cours: "en cours", a_venir: "à venir", termine: "terminé", inconnu: "inconnu" };
-  const GROUPES = [
-    { cle: "en_cours", titre: "En cours", ouvert: true },
-    { cle: "a_venir", titre: "À venir", ouvert: true },
-    { cle: "inconnu", titre: "Statut inconnu", ouvert: true },
-    { cle: "termine", titre: "Terminés", ouvert: false }
-  ];
 
   function jourParis(dateIso) {
     return new Date(dateIso).toLocaleDateString("en-CA", { timeZone: "Europe/Paris" }); // AAAA-MM-JJ
@@ -382,6 +402,13 @@
     if (e === -1) return "hier " + h;
     if (e === 1) return "demain " + h;
     return new Date(dateIso).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris", day: "2-digit", month: "2-digit" }) + " " + h;
+  }
+  function libelleJour(dateIso) {
+    const e = ecartJours(dateIso);
+    if (e === 0) return "Aujourd'hui";
+    if (e === 1) return "Demain";
+    if (e === -1) return "Hier";
+    return new Date(dateIso).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris", weekday: "long", day: "2-digit", month: "2-digit" });
   }
 
   // Rang d'un match pour le regroupement : direct / a_venir / termine / inconnu
@@ -401,65 +428,173 @@
     return !!(directCache && (directCache.matchs || []).some((x) => { const e = etatSerie(x); return e === "en_jeu" || e === "entre_cartes"; }));
   }
 
+  let filtreMatchs = "jour";
+  try { const f = localStorage.getItem("filtre_matchs"); if (f === "jour" || f === "tournoi" || f === "tier") filtreMatchs = f; } catch (e) { /* facultatif */ }
+  let replayCartes = []; // résultats par carte des matchs de la fenêtre (vue app_replay_cartes)
+
   async function chargerMatchs() {
     const [jour] = await Promise.all([
       sb.from("app_matchs").select("*").order("start_time", { ascending: true }),
       chargerDonneesDirect()
     ]);
     if (jour.error) throw jour.error;
-
     matchsCache = jour.data || [];
+    // Résultats carte par carte : facultatif (si la vue n'existe pas encore, la liste reste correcte)
+    replayCartes = [];
+    try {
+      const ids = matchsCache.map((m) => m.hltv_match_id).filter(Boolean);
+      if (ids.length) {
+        const rc = await sb.from("app_replay_cartes").select("*").in("hltv_match_id", ids).order("carte_no", { ascending: true });
+        if (!rc.error) replayCartes = rc.data || [];
+      }
+    } catch (e) { replayCartes = []; }
+    dessinerMatchs();
+  }
+
+  function dessinerFiltresMatchs() {
+    const f = $("filtres-matchs");
+    vider(f);
+    [["jour", "Par jour"], ["tournoi", "Par tournoi"], ["tier", "Par tier"]].forEach(([id, nom]) => {
+      const b = el("button", "filtre" + (filtreMatchs === id ? " actif" : ""), nom);
+      b.type = "button";
+      b.addEventListener("click", () => {
+        filtreMatchs = id;
+        try { localStorage.setItem("filtre_matchs", id); } catch (e) { /* facultatif */ }
+        dessinerMatchs();
+      });
+      f.appendChild(b);
+    });
+  }
+
+  function groupesMatchs(items) {
+    // items : { m, lm } hors direct. Retourne [{ titre, items }]
+    const carte = {};
+    const ordre = [];
+    const ajouter = (cle, titre, it) => {
+      if (!carte[cle]) { carte[cle] = { titre, items: [] }; ordre.push(cle); }
+      carte[cle].items.push(it);
+    };
+    items.forEach((it) => {
+      const m = it.m;
+      if (filtreMatchs === "jour") ajouter(jourParis(m.start_time), libelleJour(m.start_time), it);
+      else if (filtreMatchs === "tournoi") ajouter(m.league || "ligue inconnue", m.league || "Ligue inconnue", it);
+      else ajouter(m.tier ? String(m.tier).toLowerCase() : "zz", m.tier ? "Tier " + String(m.tier).toUpperCase() : "Sans tier", it);
+    });
+    const groupes = ordre.map((k) => ({ cle: k, titre: carte[k].titre, items: carte[k].items }));
+    const t = (it) => new Date(it.m.start_time).getTime();
+    if (filtreMatchs === "jour") {
+      const auj = jourParis(new Date().toISOString());
+      // aujourd'hui, puis les jours à venir, puis les jours passés (le plus récent d'abord)
+      groupes.sort((x, y) => {
+        const fx = x.cle >= auj, fy = y.cle >= auj;
+        if (fx !== fy) return fx ? -1 : 1;
+        return fx ? x.cle.localeCompare(y.cle) : y.cle.localeCompare(x.cle);
+      });
+      groupes.forEach((g) => g.items.sort((a, b) => t(a) - t(b)));
+    } else {
+      groupes.forEach((g) => {
+        const venir = g.items.filter((it) => it.m.statut_match !== "termine").sort((a, b) => t(a) - t(b));
+        const fini = g.items.filter((it) => it.m.statut_match === "termine").sort((a, b) => t(b) - t(a));
+        g.items = venir.concat(fini);
+        g.cleTri = venir.length ? t(venir[0]) : Infinity;
+        g.cleFin = fini.length ? t(fini[0]) : 0;
+      });
+      if (filtreMatchs === "tier") groupes.sort((x, y) => x.cle.localeCompare(y.cle));
+      else groupes.sort((x, y) => (x.cleTri !== y.cleTri) ? (x.cleTri < y.cleTri ? -1 : 1) : y.cleFin - x.cleFin);
+    }
+    return groupes;
+  }
+
+  function dessinerMatchs() {
+    dessinerFiltresMatchs();
     const liste = $("liste-matchs");
     vider(liste);
     if (matchsCache.length === 0) {
       liste.appendChild(el("div", "carte discret", "Aucun match entre hier et après-demain."));
     }
-
-    const groupes = { direct: [], a_venir: [], termine: [], inconnu: [] };
+    const direct = [], autres = [], inconnu = [];
     matchsCache.forEach((m) => {
       const lm = liveDe(m);
       const cat = categorieMatch(m, lm);
-      (groupes[cat] || groupes.inconnu).push({ m, lm });
+      if (cat === "direct") direct.push({ m, lm });
+      else if (cat === "inconnu") inconnu.push({ m, lm });
+      else autres.push({ m, lm });
     });
-    groupes.direct.sort((x, y) => String((y.lm && y.lm.dernier_round_le) || "").localeCompare(String((x.lm && x.lm.dernier_round_le) || "")));
-    groupes.termine.reverse(); // les plus récents d'abord
+    direct.sort((x, y) => String((y.lm && y.lm.dernier_round_le) || "").localeCompare(String((x.lm && x.lm.dernier_round_le) || "")));
 
-    // 1. En direct (toujours affiché)
-    liste.appendChild(el("h3", "groupe-titre", "En direct (" + groupes.direct.length + ")"));
-    if (!groupes.direct.length) liste.appendChild(el("p", "discret petit", "Aucun match en direct pour le moment."));
-    groupes.direct.forEach(({ m, lm }) => liste.appendChild(lm ? carteDirect(lm) : carteMatch(m)));
+    // 1. En direct : toujours en premier, quel que soit le filtre
+    liste.appendChild(el("h3", "groupe-titre", "En direct (" + direct.length + ")"));
+    if (!direct.length) liste.appendChild(el("p", "discret petit", "Aucun match en direct pour le moment."));
+    direct.forEach(({ m, lm }) => liste.appendChild(lm ? carteDirect(lm) : carteMatch(m)));
 
-    // 2. À venir
-    if (groupes.a_venir.length) {
-      liste.appendChild(el("h3", "groupe-titre", "À venir (" + groupes.a_venir.length + ")"));
-      groupes.a_venir.forEach(({ m }) => liste.appendChild(carteMatch(m)));
-    }
-    // 3. Terminés (repliés)
-    if (groupes.termine.length) {
+    // 2. Le reste, regroupé selon le filtre
+    groupesMatchs(autres).forEach((g) => {
+      liste.appendChild(el("h3", "groupe-titre", g.titre + " (" + g.items.length + ")"));
+      g.items.forEach(({ m }) => liste.appendChild(carteMatch(m)));
+    });
+
+    // 3. Sans confirmation (replié)
+    if (inconnu.length) {
       const d = el("details", "carte");
-      d.appendChild(el("summary", null, "Terminés (" + groupes.termine.length + ")"));
-      groupes.termine.forEach(({ m }) => d.appendChild(carteMatch(m)));
-      liste.appendChild(d);
-    }
-    // 4. Sans confirmation (repliés)
-    if (groupes.inconnu.length) {
-      const d = el("details", "carte");
-      d.appendChild(el("summary", null, "Sans confirmation (" + groupes.inconnu.length + ")"));
+      d.appendChild(el("summary", null, "Sans confirmation (" + inconnu.length + ")"));
       d.appendChild(el("p", "discret petit", "Heure de début passée, mais aucune source ne confirme que le match a eu lieu (pas de rounds HLTV, pas de résultat BO3GG ni ODDSPAPI)."));
-      groupes.inconnu.forEach(({ m }) => d.appendChild(carteMatch(m)));
+      inconnu.forEach(({ m }) => d.appendChild(carteMatch(m)));
       liste.appendChild(d);
     }
+  }
+
+  function boDe(m) {
+    const se = m.hltv_match_id ? serieDe(m) : null;
+    return se && se.bo ? Number(se.bo) : null;
   }
 
   function carteMatch(m) {
     const bouton = el("button", "match");
     bouton.type = "button";
-    bouton.appendChild(el("div", "equipes", (m.team1 || "?") + "  –  " + (m.team2 || "?")));
-    const l2 = el("div", "ligne2");
-    l2.appendChild(el("span", null, m.league || "ligue inconnue"));
-    l2.appendChild(el("span", null, heureAvecJour(m.start_time)));
-    bouton.appendChild(l2);
-    bouton.appendChild(badgesLiaison(m));
+    const fini = m.statut_match === "termine";
+    const haut = el("div", "ligne-haut");
+    const eq = el("span", "equipes");
+    if (fini && m.score1 !== null && m.score1 !== undefined && m.score2 !== null && m.score2 !== undefined) {
+      eq.appendChild(el("span", "eq-a" + (m.score1 > m.score2 ? " gagne" : ""), m.team1 || "?"));
+      eq.appendChild(el("span", "score-res", " " + m.score1 + " – " + m.score2 + " "));
+      eq.appendChild(el("span", "eq-b" + (m.score2 > m.score1 ? " gagne" : ""), m.team2 || "?"));
+    } else eq.textContent = (m.team1 || "?") + "  –  " + (m.team2 || "?");
+    haut.appendChild(eq);
+    const lib = { termine: "Terminé", a_venir: "À venir", en_cours: "● En cours", inconnu: "Sans confirmation" }[m.statut_match || "inconnu"] || "";
+    haut.appendChild(el("span", "badge" + (m.statut_match === "en_cours" ? " live" : ""), lib));
+    bouton.appendChild(haut);
+    const bo = boDe(m);
+    const meta = [m.league || "ligue inconnue", heureAvecJour(m.start_time)];
+    if (bo) meta.push("BO" + bo);
+    if (m.tier) meta.push("Tier " + String(m.tier).toUpperCase());
+    bouton.appendChild(el("div", "meta-match", meta.join(" · ")));
+    // Une ligne par carte jouée
+    if (fini && m.hltv_match_id) {
+      const cs = replayCartes.filter((c) => c.hltv_match_id === m.hltv_match_id);
+      if (cs.length) {
+        const z = el("div", "cartes-liste");
+        cs.forEach((c) => {
+          const l = el("div", "ligne-carte");
+          let g = "Carte " + c.carte_no + " · " + nomCarte(c.carte);
+          if (bo && bo >= 3 && Number(c.carte_no) === bo && c.finie) g += " · décisive";
+          if (!c.finie) g += " · non terminée";
+          l.appendChild(el("span", null, g));
+          const o = orienter(m.team1, m.team2, c.equipe_ct, c.score_ct, c.equipe_t, c.score_t);
+          const r = el("span", "res-carte");
+          if (o) {
+            r.appendChild(el("span", o.s1 > o.s2 ? "eq-a gagne" : "", String(o.s1)));
+            r.appendChild(document.createTextNode(" – "));
+            r.appendChild(el("span", o.s2 > o.s1 ? "eq-b gagne" : "", String(o.s2)));
+          } else {
+            const ga = c.score_ct > c.score_t ? c.equipe_ct : c.equipe_t;
+            r.textContent = (ga || "?") + " " + Math.max(c.score_ct, c.score_t) + " – " + Math.min(c.score_ct, c.score_t);
+          }
+          l.appendChild(r);
+          z.appendChild(l);
+        });
+        bouton.appendChild(z);
+      }
+    }
     bouton.addEventListener("click", () => ouvrirFiche(m));
     return bouton;
   }
@@ -473,7 +608,6 @@
     b.appendChild(el("span", "badge " + (m.lie_oddspapi ? "ok" : "non"), m.lie_oddspapi ? "ODDSPAPI" : "ODDSPAPI : non"));
     return b;
   }
-
 
   /* ---------- écran En direct ---------- */
   function classeFraicheur(sec, vert, orange) {
@@ -535,10 +669,50 @@
     return noms.map((n) => n + " " + ((se.victoires || {})[n] || 0)).join(" – ");
   }
 
+  function victoiresOrientees(m) {
+    const se = serieDe(m);
+    if (!se) return null;
+    let v1 = 0, v2 = 0, ok = true;
+    Object.keys(se.victoires || {}).forEach((n) => {
+      const r = rangEquipe(n, m.team1, m.team2);
+      if (r === "a") v1 += Number(se.victoires[n]); else if (r === "b") v2 += Number(se.victoires[n]); else ok = false;
+    });
+    return ok ? { v1, v2, bo: se.bo } : null;
+  }
+
+  function coteEquipeEl(nom, camp, cls) {
+    const s = el("span", "cote-equipe " + cls);
+    s.appendChild(el("div", "nom-eq", nom || "?"));
+    if (camp) s.appendChild(el("div", "camp", camp));
+    return s;
+  }
+  // Score de la carte en cours : équipe 1 à gauche (vert), équipe 2 à droite (violet), camp actuel sous le nom
+  function blocScore(m) {
+    const sc = el("div", "score-live");
+    const o = orienter(m.team1, m.team2, m.ct_team, m.score_ct, m.t_team, m.score_t);
+    if (o) {
+      sc.appendChild(coteEquipeEl(m.team1, o.camp1, "eq-a"));
+      sc.appendChild(el("span", "gros-score", o.s1 + " – " + o.s2));
+      sc.appendChild(coteEquipeEl(m.team2, o.camp2, "eq-b"));
+    } else {
+      sc.appendChild(coteEquipeEl(m.ct_team, "CT", ""));
+      sc.appendChild(el("span", "gros-score", m.score_ct + " – " + m.score_t));
+      sc.appendChild(coteEquipeEl(m.t_team, "T", ""));
+    }
+    return sc;
+  }
+  function texteCartesGagnees(m) {
+    const vo = victoiresOrientees(m);
+    if (vo) return "Cartes gagnées : " + vo.v1 + " – " + vo.v2 + (vo.bo ? "  (BO" + vo.bo + ")" : "");
+    const sc2 = scoreCartes(m);
+    const se = serieDe(m);
+    return sc2 ? "Cartes gagnées : " + sc2 + (se && se.bo ? "  (BO" + se.bo + ")" : "") : null;
+  }
+
   function carteDirect(m) {
-    const b = el("button", "match");
+    const b = el("button", "match direct");
     b.type = "button";
-    const haut = el("div", "ligne2");
+    const haut = el("div", "ligne-haut");
     haut.appendChild(el("span", "equipes", (m.team1 || "?") + "  –  " + (m.team2 || "?")));
     const etat = etatSerie(m);
     if (etat === "en_jeu") haut.appendChild(el("span", "badge live", "● En jeu"));
@@ -546,18 +720,14 @@
     else if (etat === "termine") haut.appendChild(el("span", "badge", "Terminé"));
     b.appendChild(haut);
     if (m.dernier_round_fini !== null && m.dernier_round_fini !== undefined) {
-      const sc = el("div", "score-live");
-      sc.appendChild(el("span", "cote-equipe", (m.ct_team || "?") + " (CT)"));
-      sc.appendChild(el("span", "gros-score", m.score_ct + " – " + m.score_t));
-      sc.appendChild(el("span", "cote-equipe", (m.t_team || "?") + " (T)"));
-      b.appendChild(sc);
+      b.appendChild(blocScore(m));
       const se = serieDe(m);
-      let infos = (m.carte || "carte ?") + " · carte " + m.carte_no + " · round " + m.dernier_round_fini + " terminé";
-      if (etat === "entre_cartes") infos = "Carte " + m.carte_no + " terminée" + (se && se.prochaine_carte ? " · prochaine : " + se.prochaine_carte : "");
-      else if (etat === "termine") infos = "Série terminée · dernière carte : " + (m.carte || "?");
+      let infos = nomCarte(m.carte) + " · carte " + m.carte_no + " · round " + m.dernier_round_fini;
+      if (etat === "entre_cartes") infos = "Carte " + m.carte_no + " terminée" + (se && se.prochaine_carte ? " · prochaine : " + nomCarte(se.prochaine_carte) : "");
+      else if (etat === "termine") infos = "Série terminée · dernière carte : " + nomCarte(m.carte);
       b.appendChild(el("div", "discret petit centre", infos));
-      const sc2 = scoreCartes(m);
-      if (sc2) b.appendChild(el("div", "discret petit centre", "Cartes gagnées : " + sc2 + (se && se.bo ? "  (BO" + se.bo + ")" : "")));
+      const t = texteCartesGagnees(m);
+      if (t) b.appendChild(el("div", "discret petit centre", t));
     } else {
       b.appendChild(el("div", "discret petit", "Pas encore de round lu."));
     }
@@ -571,9 +741,13 @@
 
   function ouvrirDirect(m) {
     ficheDirectId = m.maitre_id;
+    carteChoisie = null;
     $("fiche-titre").textContent = (m.team1 || "?") + " – " + (m.team2 || "?");
     $("fiche-sous").textContent = "En direct · données HLTV";
-    vider($("fiche-badges"));
+    const zb = $("fiche-badges");
+    vider(zb);
+    const mm = matchsCache.find((x) => x.id === m.maitre_id);
+    if (mm) zb.appendChild(badgesLiaison(mm));
     remplirDetailDirect(m);
     $("fiche").classList.remove("cache");
   }
@@ -582,78 +756,181 @@
     const zone = $("fiche-detail");
     vider(zone);
     const rounds = directCache.rounds.filter((r) => r.hltv_match_id === m.hltv_match_id);
-        const veto = directCache.vetos.find((v) => v.hltv_match_id === m.hltv_match_id);
+    const veto = directCache.vetos.find((v) => v.hltv_match_id === m.hltv_match_id);
 
-    // Score
+    // Score en grand
     const sc = el("div", "carte");
-    sc.appendChild(el("strong", null, "Score"));
-    if (m.dernier_round_fini !== null && m.dernier_round_fini !== undefined) {
-      sc.appendChild(el("p", null, (m.ct_team || "?") + " (CT) " + m.score_ct + " – " + m.score_t + " " + (m.t_team || "?") + " (T)"));
-      sc.appendChild(el("p", "discret petit", (m.carte || "carte ?") + " · carte " + m.carte_no + " · round " + m.dernier_round_fini + " terminé à " + heureSeule(m.dernier_round_le)));
-    } else sc.appendChild(el("p", "discret petit", "Pas encore de round lu."));
-    const se = serieDe(m);
     const etat = etatSerie(m);
-    const libEtat = { en_jeu: "En jeu", entre_cartes: "Entre deux cartes", termine: "Série terminée", inactif: "Aucune activité récente" }[etat];
-    sc.appendChild(el("p", null, "Statut : " + libEtat + (se && se.bo ? " · BO" + se.bo : "")));
-    const scc = scoreCartes(m);
-    if (scc) sc.appendChild(el("p", "discret petit", "Cartes gagnées : " + scc));
-    if (etat === "entre_cartes" && se && se.prochaine_carte) sc.appendChild(el("p", "petit", "Prochaine carte : " + se.prochaine_carte));
+    const libEtat = { en_jeu: "● En jeu", entre_cartes: "⏸ Entre deux cartes", termine: "Série terminée", inactif: "Aucune activité récente" }[etat];
+    const se = serieDe(m);
+    sc.appendChild(el("div", "discret petit", libEtat + (se && se.bo ? " · BO" + se.bo : "")));
+    if (m.dernier_round_fini !== null && m.dernier_round_fini !== undefined) {
+      sc.appendChild(blocScore(m));
+      sc.appendChild(el("div", "discret petit centre", nomCarte(m.carte) + " · carte " + m.carte_no + " · round " + m.dernier_round_fini + " terminé à " + heureSeule(m.dernier_round_le)));
+    } else sc.appendChild(el("p", "discret petit", "Pas encore de round lu."));
+    const t = texteCartesGagnees(m);
+    if (t) sc.appendChild(el("div", "discret petit centre", t));
+    if (etat === "entre_cartes" && se && se.prochaine_carte) sc.appendChild(el("div", "petit centre", "Prochaine carte : " + nomCarte(se.prochaine_carte)));
     zone.appendChild(sc);
 
-    // Frise des rounds (une ligne par carte)
-    const fr = el("div", "carte");
-    fr.appendChild(el("strong", null, "Rounds"));
-    const cartes = {};
-    rounds.forEach((r) => { (cartes[r.carte_no] = cartes[r.carte_no] || []).push(r); });
-    const nums = Object.keys(cartes).sort((a, b) => a - b);
-    if (!nums.length) fr.appendChild(el("p", "discret petit", "Aucun round enregistré."));
-    nums.forEach((n) => {
-      const liste = cartes[n];
-      fr.appendChild(el("p", "discret petit", "Carte " + n + " · " + (liste[0].carte || "?")));
-      const f = el("div", "frise");
-      liste.forEach((r) => {
-        const c = el("span", "round " + (r.winner_side === "CT" || r.winner_side === "ct" ? "ct" : "t"), r.pistol ? "P" : "");
-        f.appendChild(c);
-      });
-      fr.appendChild(f);
-    });
-    fr.appendChild(el("p", "discret petit", "Bleu = victoire CT, orange = victoire T, P = pistol round."));
-    const derniers = rounds.slice(-5).reverse();
-    derniers.forEach((r) => {
-      let t = "Carte " + r.carte_no + " · R" + r.round_no + " · " + (r.winner_team || "?") + " (" + (r.winner_side === "CT" ? "CT" : (r.winner_side ? "T" : "?")) + ")";
-      if (r.win_type) t += " · " + (TYPES_VICTOIRE[r.win_type] || r.win_type);
-      if (r.bomb_site) t += " · site " + r.bomb_site;
-      fr.appendChild(el("p", "petit", t));
-    });
-    zone.appendChild(fr);
+    dessinerReplay(zone, {
+      t1: m.team1, t2: m.team2, rounds: rounds, veto: veto && Array.isArray(veto.veto) ? veto.veto : null, live: etat === "en_jeu"
+    }, () => remplirDetailDirect(m));
+  }
 
-    // Cotes : OddsPapi n'a pas de direct, l'historique arrive après le match
-    const co = el("div", "carte");
-    co.appendChild(el("strong", null, "Cotes"));
-    co.appendChild(el("p", "discret petit", "Pas de cotes en direct : l'historique des cotes (ODDSPAPI) est récupéré après la fin du match."));
-    zone.appendChild(co);
+  /* ---------- déroulé des rounds (direct et replay) ---------- */
+  let carteChoisie = null;
+  let ficheToken = 0;
 
-    // Picks et bans
+  function gagnantRound(r) {
+    if (r.winner_team) return r.winner_team;
+    const s = String(r.winner_side || "").toUpperCase();
+    return s === "CT" ? r.ct_team : (s === "T" ? r.t_team : null);
+  }
+
+  // Associe chaque équipe de la carte à une ligne : "a" (équipe 1, vert) ou "b" (équipe 2, violet)
+  function rangsCarte(rs, t1, t2) {
+    const noms = [];
+    rs.forEach((r) => [r.ct_team, r.t_team, r.winner_team].forEach((n) => { if (n && noms.indexOf(n) === -1) noms.push(n); }));
+    const rang = {};
+    const pris = {};
+    noms.forEach((n) => { const x = rangEquipe(n, t1, t2); if (x && !pris[x]) { rang[n] = x; pris[x] = true; } });
+    noms.forEach((n) => {
+      if (rang[n]) return;
+      const x = !pris.a ? "a" : (!pris.b ? "b" : "b");
+      rang[n] = x; pris[x] = true;
+    });
+    let nomA = t1, nomB = t2;
+    noms.forEach((n) => { if (rang[n] === "a" && !memeEquipe(n, t1)) nomA = nomA || n; if (rang[n] === "b" && !memeEquipe(n, t2)) nomB = nomB || n; });
+    return { rang, nomA: nomA || "Équipe 1", nomB: nomB || "Équipe 2" };
+  }
+
+  function dessinerGrille(rs, rg, vivant) {
+    const dernier = rs.length ? Number(rs[rs.length - 1].round_no) : 0;
+    const cols = Math.max(24, dernier);
+    const wrap = el("div", "grille-rounds");
+    const leg = el("div", "leg-rounds");
+    leg.appendChild(el("span", "eq-a", "■ " + rg.nomA));
+    leg.appendChild(el("span", "eq-b", "■ " + rg.nomB));
+    wrap.appendChild(leg);
+    const g = el("div", "grille");
+    g.style.gridTemplateColumns = "repeat(" + cols + ", 1fr)";
+    const parNo = {};
+    rs.forEach((r) => { parNo[r.round_no] = r; });
+    ["a", "b"].forEach((ligne) => {
+      for (let i = 1; i <= cols; i++) {
+        const r = parNo[i];
+        let cl = "cell";
+        let txt = "";
+        if (!r) cl += " futur";
+        else {
+          const w = rg.rang[gagnantRound(r)];
+          if (w === ligne) { cl += " " + ligne; if (r.pistol) txt = "P"; if (vivant && i === dernier) cl += " cur"; }
+          else cl += " vide";
+        }
+        if (i === 13) cl += " mt";
+        g.appendChild(el("div", cl, txt));
+      }
+    });
+    for (let i = 1; i <= cols; i++) {
+      const n = el("div", "num" + (i === 13 ? " mt" : ""), (cols <= 24 || i % 3 === 0 || i === 1) ? String(i) : "");
+      g.appendChild(n);
+    }
+    wrap.appendChild(g);
+    const r1 = rs[0];
+    if (r1) {
+      const ctNom = rg.rang[r1.ct_team] === "a" ? rg.nomA : rg.nomB;
+      const tNom = rg.rang[r1.ct_team] === "a" ? rg.nomB : rg.nomA;
+      const mi = el("div", "mi");
+      mi.appendChild(el("span", null, "1re mi-temps · " + ctNom + " CT, " + tNom + " T"));
+      mi.appendChild(el("span", null, cols > 24 ? "2e · côtés inversés · prolongation" : "2e · côtés inversés"));
+      wrap.appendChild(mi);
+    }
+    return wrap;
+  }
+
+  function dessinerVeto(zone, veto) {
     const vt = el("div", "carte");
     vt.appendChild(el("strong", null, "Picks et bans"));
-    const liste = veto && Array.isArray(veto.veto) ? veto.veto.slice().sort((a, b) => a.n - b.n) : [];
-    if (!liste.length) vt.appendChild(el("p", "discret petit", "Pas encore de veto lu sur HLTV."));
+    const liste = Array.isArray(veto) ? veto.slice().sort((a, b) => a.n - b.n) : [];
+    if (!liste.length) vt.appendChild(el("p", "discret petit", "Pas de veto lu sur HLTV."));
     liste.forEach((v) => {
       if (v.action === ACTION_RESTANTE) vt.appendChild(el("p", "petit", v.n + ". " + (v.carte || "?") + " : carte restante (décisive)"));
       else vt.appendChild(el("p", "petit", v.n + ". " + (v.equipe || "?") + " " + (VERBES_VETO[v.action] || v.action || "") + " " + (v.carte || "?")));
     });
-    // Carte restante = décisive (déduite : pool de 7 moins les 6 cartes du veto)
     if (liste.length === 6 && !liste.some((v) => v.action === ACTION_RESTANTE)) {
       const vues = liste.map((v) => String(v.carte || "").toLowerCase());
       const reste = POOL_CARTES.filter((c) => vues.indexOf(c.toLowerCase()) === -1);
       const toutesConnues = vues.every((c) => POOL_CARTES.some((p) => p.toLowerCase() === c));
-      if (reste.length === 1 && toutesConnues) {
-        vt.appendChild(el("p", "petit", "7. " + reste[0] + " : carte restante (décisive), déduite faute de lecture HLTV"));
-      }
+      if (reste.length === 1 && toutesConnues) vt.appendChild(el("p", "petit", "7. " + reste[0] + " : carte restante (décisive), déduite faute de lecture HLTV"));
     }
     zone.appendChild(vt);
   }
 
+  // ctx = { t1, t2, rounds, veto, live }
+  function dessinerReplay(zone, ctx, redessiner) {
+    const parCarte = {};
+    ctx.rounds.forEach((r) => { (parCarte[r.carte_no] = parCarte[r.carte_no] || []).push(r); });
+    Object.keys(parCarte).forEach((k) => parCarte[k].sort((a, b) => a.round_no - b.round_no));
+    const nums = Object.keys(parCarte).map(Number).sort((a, b) => a - b);
+    if (!nums.length) {
+      const c = el("div", "carte");
+      c.appendChild(el("strong", null, "Rounds"));
+      c.appendChild(el("p", "discret petit", "Aucun round enregistré."));
+      zone.appendChild(c);
+    } else {
+      if (carteChoisie === null || !parCarte[carteChoisie]) carteChoisie = nums[nums.length - 1];
+      const tabs = el("div", "carte-onglets");
+      nums.forEach((n) => {
+        const b = el("button", "carte-onglet" + (n === carteChoisie ? " actif" : ""));
+        b.type = "button";
+        b.appendChild(el("span", null, "Carte " + n));
+        b.appendChild(el("small", null, nomCarte(parCarte[n][0].carte)));
+        b.addEventListener("click", () => { carteChoisie = n; redessiner(); });
+        tabs.appendChild(b);
+      });
+      zone.appendChild(tabs);
+
+      const rs = parCarte[carteChoisie];
+      const rg = rangsCarte(rs, ctx.t1, ctx.t2);
+      const dern = rs[rs.length - 1];
+      const sCt = Number(dern.score_ct), sT = Number(dern.score_t);
+      const sA = rg.rang[dern.ct_team] === "a" ? sCt : sT;
+      const sB = rg.rang[dern.ct_team] === "a" ? sT : sCt;
+      const c = el("div", "carte");
+      const tit = el("strong", null, "Carte " + carteChoisie + " · " + nomCarte(rs[0].carte) + " · ");
+      tit.appendChild(el("span", "eq-a", String(sA)));
+      tit.appendChild(document.createTextNode(" – "));
+      tit.appendChild(el("span", "eq-b", String(sB)));
+      c.appendChild(tit);
+      c.appendChild(dessinerGrille(rs, rg, ctx.live && carteChoisie === nums[nums.length - 1]));
+      zone.appendChild(c);
+    }
+    dessinerVeto(zone, ctx.veto);
+  }
+
+  async function chargerReplay(m, token) {
+    const zone = $("fiche-detail");
+    vider(zone);
+    zone.appendChild(el("p", "discret petit", "Chargement du replay…"));
+    let ctx = null, erreur = false;
+    try {
+      const [r, v] = await Promise.all([
+        sb.from("app_replay_rounds").select("*").eq("hltv_match_id", m.hltv_match_id).order("carte_no", { ascending: true }).order("round_no", { ascending: true }),
+        sb.from("app_replay_veto").select("*").eq("hltv_match_id", m.hltv_match_id).limit(1)
+      ]);
+      if (r.error) throw r.error;
+      ctx = { t1: m.team1, t2: m.team2, rounds: r.data || [], veto: (!v.error && v.data && v.data[0] && Array.isArray(v.data[0].veto)) ? v.data[0].veto : null, live: false };
+    } catch (e) { erreur = true; }
+    if (token !== ficheToken) return; // une autre fiche a été ouverte entre-temps
+    vider(zone);
+    if (erreur) { zone.appendChild(el("p", "discret petit", "Replay indisponible pour l'instant.")); return; }
+    const redess = () => {
+      vider(zone);
+      dessinerReplay(zone, ctx, redess);
+    };
+    redess();
+  }
 
 
   /* ---------- Alertes (cloche + page) ---------- */
@@ -1084,6 +1361,8 @@
     $("fiche-titre").textContent = (m.team1 || "?") + " – " + (m.team2 || "?");
     $("fiche-sous").textContent = (m.league || "ligue inconnue") + " · " + heurePar(m.start_time);
     ficheDirectId = null;
+    carteChoisie = null;
+    ficheToken++;
     vider($("fiche-detail"));
     const zone = $("fiche-badges");
     vider(zone);
@@ -1094,17 +1373,24 @@
     let txt = "Statut du match : " + (LIBELLES_MATCH[statut] || statut);
     if (m.statut_source) txt += " (source " + (SOURCES_STATUT[m.statut_source] || m.statut_source) + ")";
     lignes.appendChild(el("p", "discret petit", txt));
-    if (m.score1 !== null && m.score1 !== undefined && m.score2 !== null && m.score2 !== undefined)
-      lignes.appendChild(el("p", null, "Résultat (BO3GG) : " + (m.team1 || "?") + " " + m.score1 + " – " + m.score2 + " " + (m.team2 || "?")));
+    if (m.score1 !== null && m.score1 !== undefined && m.score2 !== null && m.score2 !== undefined) {
+      const p = el("p", "score-fiche");
+      p.appendChild(el("span", "eq-a" + (m.score1 > m.score2 ? " gagne" : ""), m.team1 || "?"));
+      p.appendChild(el("span", "gros-score", " " + m.score1 + " – " + m.score2 + " "));
+      p.appendChild(el("span", "eq-b" + (m.score2 > m.score1 ? " gagne" : ""), m.team2 || "?"));
+      lignes.appendChild(p);
+    }
     if (m.statut_match === "termine" && m.op_historique)
       lignes.appendChild(el("p", "discret petit", "L'historique des cotes (ODDSPAPI) est disponible pour ce match."));
     zone.appendChild(lignes);
     const lm = liveDe(m);
-    if (lm) {
-      const bt = el("button", "bouton secondaire", "Voir rounds et picks / bans");
+    if (lm && categorieMatch(m, lm) === "direct") {
+      const bt = el("button", "bouton secondaire", "Voir le direct");
       bt.type = "button";
       bt.addEventListener("click", () => ouvrirDirect(lm));
       zone.appendChild(bt);
+    } else if (m.hltv_match_id && m.statut_match !== "a_venir") {
+      chargerReplay(m, ficheToken);
     }
     $("fiche").classList.remove("cache");
   }

@@ -176,3 +176,35 @@ details summary{cursor:pointer;font-weight:600}
 .exports .niveau .corps{flex:1;min-width:0}
 .exports .niveau .statut{margin-left:auto;font-size:.8rem;text-transform:uppercase;letter-spacing:.03em}
 .exports .niveau .fleche{color:var(--discret);font-size:1.4rem}
+
+/* v2.6 : page Matchs (filtres, cartes enrichies, déroulé par équipe, replay) */
+:root{--ea:#3ecf8e;--eb:#b48bff}
+.eq-a{color:var(--ea)} .eq-b{color:var(--eb)} .gagne{font-weight:700}
+.match .ligne-haut{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.match .meta-match{margin-top:4px;font-size:.82rem;color:var(--discret)}
+.match.direct{border-color:#6a2025}
+.score-res{color:var(--texte);font-weight:700}
+.cartes-liste{margin-top:8px;border-top:1px solid var(--bord)}
+.ligne-carte{display:flex;justify-content:space-between;gap:8px;padding:6px 0;font-size:.86rem;border-bottom:1px solid var(--bord)}
+.ligne-carte:last-child{border-bottom:0}
+.res-carte{white-space:nowrap}
+.score-live .cote-equipe .nom-eq{font-weight:600}
+.score-live .cote-equipe .camp{font-size:.72rem;color:var(--discret)}
+.score-fiche{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap}
+.score-fiche .gros-score{font-size:1.6rem;font-weight:700}
+.carte-onglets{display:flex;gap:6px;margin:8px 0}
+.carte-onglet{flex:1;display:flex;flex-direction:column;align-items:center;padding:8px 4px;border-radius:10px;
+  border:1px solid var(--bord);background:var(--carte);color:var(--texte);font-size:.8rem}
+.carte-onglet small{color:var(--discret);font-size:.72rem}
+.carte-onglet.actif{border-color:var(--accent);color:var(--accent);font-weight:600}
+.leg-rounds{display:flex;justify-content:space-between;font-weight:600;margin:8px 0}
+.grille{display:grid;gap:3px;align-items:center}
+.grille .cell{height:22px;border-radius:4px;display:flex;align-items:center;justify-content:center;
+  font-size:.62rem;font-weight:700;color:#0b0f14}
+.grille .cell.a{background:var(--ea)} .grille .cell.b{background:var(--eb)}
+.grille .cell.futur{border:1px dashed #2a3442}
+.grille .cell.vide{border:1px solid #1c2531}
+.grille .cell.cur{outline:2px solid #fff}
+.grille .mt{margin-left:5px}
+.grille .num{font-size:.58rem;color:var(--discret);text-align:center}
+.mi{display:flex;justify-content:space-between;gap:8px;font-size:.74rem;color:var(--discret);margin:4px 0 2px}

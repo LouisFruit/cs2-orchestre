@@ -216,7 +216,7 @@ details summary{cursor:pointer;font-weight:600}
 .ligne-kv{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--bord)}
 .ligne-kv span:last-child{text-align:right;font-weight:600}
 .ligne-kv span:first-child{font-weight:400}
-.titre-jour{margin:16px 0 4px;font-size:1rem;text-transform:capitalize}
+.titre-jour{margin:16px 0 4px;font-size:1rem}
 .carte-prev{display:block;width:100%;text-align:left;color:var(--texte);font-size:1rem}
 .carte-prev p{margin:4px 0}
 .prev-tete{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
@@ -233,3 +233,8 @@ details summary{cursor:pointer;font-weight:600}
 .alerte-ana{border-left:4px solid var(--retard)}
 #analyse-contenu .segment{margin:8px 0}
 .sans-bientot .carte-bientot{display:none}
+
+/* v2.9 : page Paris (fictifs) */
+.gros-nombre{font-size:1.6rem;font-weight:700;margin:4px 0}
+.courbe{width:100%;height:110px;color:var(--accent);margin:6px 0}
+.puce.fantome-puce{color:var(--discret);border-style:dashed}

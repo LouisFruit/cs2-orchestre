@@ -106,6 +106,7 @@
       if (pageCourante === "collecte") await chargerCollecte();
       else if (pageCourante === "matchs") await chargerMatchs();
       else if (pageCourante === "analyse") await chargerAnalyse();
+      else if (pageCourante === "paris") await chargerParis();
       else if (pageCourante === "reglages") await chargerReglages();
       else if (pageCourante === "alertes") await chargerAlertes();
       else if (pageCourante === "notif") await chargerReglageNotif();
@@ -438,6 +439,159 @@
     return null;
   }
 
+  /* ---------- écran Paris (v2.9) : paris FICTIFS, lecture seule ---------- */
+  // Le règlement est fait par la collecte, le robot pose les paris : l'appli ne fait qu'afficher.
+  const MARCHES = {
+    vainqueur_carte: "Vainqueur de la carte", vainqueur_match: "Vainqueur du match", handicap_cartes: "Handicap de cartes",
+    total_cartes: "Total de cartes", handicap_rounds: "Handicap de rounds", total_rounds: "Total de rounds",
+    vainqueur_mi_temps: "Vainqueur de la mi-temps", vainqueur_round: "Vainqueur d'un round"
+  };
+  const FAMILLES = { pre_match: "Avant le match", live_tenu: "En direct", trading: "Trading" };
+  const MOMENTS = { avant_match: "avant le match", avant_carte: "avant la carte", en_direct: "en direct" };
+  const STATUTS_PARI = { en_cours: ["En cours", "avenir"], gagne: ["Gagné", "juste"], perdu: ["Perdu", "rate"], rembourse: ["Remboursé", "nonev"], annule: ["Annulé", "nonev"], sorti: ["Sorti", "nonev"] };
+  let parisDonnees = { paris: [], regles: [], roi: [], courbe: [] };
+  let parisGroupe = "regle";
+
+  function euros(x) { return aVal(x) ? fmtNb(x, 2) + " € fictifs" : "—"; }
+  function nomRegle(reglesParId, id) {
+    const r = reglesParId[id];
+    return r ? r.nom + " v" + r.version : "Sans règle";
+  }
+  function libSelection(p) {
+    let sel = p.selection;
+    if (sel === "equipe1") sel = p.equipe1 || "équipe 1";
+    else if (sel === "equipe2") sel = p.equipe2 || "équipe 2";
+    else if (sel === "plus") sel = "Plus de";
+    else if (sel === "moins") sel = "Moins de";
+    else if (sel === "nul") sel = "Nul";
+    if (aVal(p.ligne)) sel += (p.selection === "plus" || p.selection === "moins" ? " " : " (") + fmtNb(p.ligne, 1) + (p.selection === "plus" || p.selection === "moins" ? "" : ")");
+    return sel;
+  }
+
+  async function chargerParis() {
+    const zone = $("paris-contenu");
+    const [pa, re, ro, co] = await Promise.all([
+      sb.from("app_paris").select("*").in("mode", ["fictif", "ombre"]).order("cree_le", { ascending: false }).limit(200),
+      sb.from("app_regles").select("*"),
+      sb.from("app_roi").select("*").eq("mode", "fictif"),
+      sb.from("app_bankroll_courbe").select("*").eq("mode", "fictif").order("t", { ascending: true })
+    ]);
+    if (pa.error) throw pa.error;
+    parisDonnees = { paris: pa.data || [], regles: re.error ? [] : (re.data || []), roi: ro.error ? [] : (ro.data || []), courbe: co.error ? [] : (co.data || []) };
+    dessinerParis();
+  }
+
+  function courbeSvg(points) {
+    const NS = "http://www.w3.org/2000/svg";
+    const W = 320, H = 110, m = 6;
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    svg.setAttribute("class", "courbe");
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", "Courbe de la bankroll fictive");
+    const v = points.map((p) => Number(p.solde));
+    const mn = Math.min.apply(null, v), mx = Math.max.apply(null, v);
+    const span = mx - mn || 1;
+    const pts = points.map((p, i) => {
+      const x = points.length === 1 ? W / 2 : m + (i * (W - 2 * m)) / (points.length - 1);
+      const y = H - m - ((Number(p.solde) - mn) / span) * (H - 2 * m);
+      return x.toFixed(1) + "," + y.toFixed(1);
+    });
+    if (points.length > 1) {
+      const l = document.createElementNS(NS, "polyline");
+      l.setAttribute("points", pts.join(" "));
+      l.setAttribute("fill", "none"); l.setAttribute("stroke", "currentColor"); l.setAttribute("stroke-width", "2");
+      svg.appendChild(l);
+    }
+    const c = document.createElementNS(NS, "circle");
+    const dern = pts[pts.length - 1].split(",");
+    c.setAttribute("cx", dern[0]); c.setAttribute("cy", dern[1]); c.setAttribute("r", "3.5"); c.setAttribute("fill", "currentColor");
+    svg.appendChild(c);
+    return svg;
+  }
+
+  function dessinerParis() {
+    const zone = $("paris-contenu");
+    vider(zone);
+    const d = parisDonnees;
+    const reglesParId = {};
+    d.regles.forEach((r) => { reglesParId[r.id] = r; });
+
+    zone.appendChild(el("div", "bandeau fantome", "👻 FANTÔME : tous ces paris sont fictifs. Aucun argent réel n'est engagé."));
+
+    // Bankroll fictive
+    const dernier = d.courbe.length ? d.courbe[d.courbe.length - 1] : null;
+    const enCours = d.paris.filter((p) => p.statut === "en_cours");
+    const regles = d.paris.filter((p) => p.statut !== "en_cours");
+    const c1 = el("div", "carte");
+    c1.appendChild(el("strong", null, "Bankroll fictive"));
+    c1.appendChild(el("p", "gros-nombre", dernier ? euros(dernier.solde) : "—"));
+    if (dernier && Number(dernier.ecart_au_sommet) < 0) c1.appendChild(el("p", "discret petit", "Sous le sommet de " + euros(Math.abs(Number(dernier.ecart_au_sommet)))));
+    if (d.courbe.length) c1.appendChild(courbeSvg(d.courbe));
+    else c1.appendChild(el("p", "discret petit", "Pas encore de mouvement fictif."));
+    c1.appendChild(el("p", "discret petit", enCours.length + " pari(s) en cours · " + regles.length + " réglé(s). Le règlement est automatique, à la fin de la carte ou du match."));
+    zone.appendChild(c1);
+
+    // ROI
+    const c2 = el("div", "carte");
+    c2.appendChild(el("strong", null, "ROI des paris fictifs"));
+    const seg = el("div", "segment");
+    [["regle", "Règle"], ["marche", "Marché"], ["famille", "Moment"], ["profil", "Profil"]].forEach(([k, t]) => {
+      const b = el("button", (parisGroupe === k ? "actif" : "") + (k === "profil" ? " grise" : ""), t);
+      b.addEventListener("click", () => { parisGroupe = k; dessinerParis(); });
+      seg.appendChild(b);
+    });
+    c2.appendChild(seg);
+    if (parisGroupe === "profil") {
+      c2.appendChild(el("p", "discret petit", "Profils safe, modéré et risky : bientôt, dès que les règles de l'analyse (v1 du 24/11) les définissent."));
+    } else if (!d.roi.length) {
+      c2.appendChild(el("p", "discret petit", "Aucun pari réglé pour l'instant : pas de ROI à afficher."));
+    } else {
+      const g = {};
+      d.roi.forEach((r) => {
+        const cle = parisGroupe === "regle" ? nomRegle(reglesParId, r.regle_id) : parisGroupe === "marche" ? (MARCHES[r.marche] || r.marche) : (FAMILLES[r.famille] || r.famille);
+        const x = g[cle] || (g[cle] = { n: 0, gagnes: 0, mises: 0, gains: 0 });
+        x.n += Number(r.n); x.gagnes += Number(r.gagnes); x.mises += Number(r.mises); x.gains += Number(r.gains);
+      });
+      Object.keys(g).forEach((cle) => {
+        const x = g[cle];
+        const roi = x.mises ? (x.gains / x.mises) * 100 : null;
+        const l = el("div", "ligne-kv" + (x.n < 30 ? " grise" : ""));
+        l.appendChild(el("span", null, cle + " · " + x.n + " pari(s), " + x.gagnes + " gagné(s)"));
+        l.appendChild(el("span", null, (roi === null ? "—" : (roi >= 0 ? "+" : "−") + fmtNb(Math.abs(roi), 1) + " %") + (x.n < 30 ? " (échantillon faible)" : "")));
+        c2.appendChild(l);
+      });
+      c2.appendChild(el("p", "discret petit", "Gains divisés par mises. Sous 30 paris, un ROI ne prouve rien. Les intervalles de confiance par match viendront de l'analyse."));
+    }
+    zone.appendChild(c2);
+
+    // Listes
+    const liste = (titre, paris, vide) => {
+      zone.appendChild(el("h3", "titre-jour", titre));
+      if (!paris.length) { zone.appendChild(el("p", "discret petit", vide)); return; }
+      paris.forEach((p) => zone.appendChild(cartePari(p, reglesParId)));
+    };
+    liste("En cours", enCours, "Aucun pari en cours.");
+    liste("Réglés", regles, "Aucun pari réglé pour l'instant. Les premiers paris fictifs sont attendus début novembre.");
+  }
+
+  function cartePari(p, reglesParId) {
+    const c = el("div", "carte carte-prev");
+    const [txt, cl] = STATUTS_PARI[p.statut] || [p.statut, "nonev"];
+    const tete = el("div", "prev-tete");
+    tete.appendChild(el("strong", null, (p.equipe1 || "?") + " – " + (p.equipe2 || "?")));
+    tete.appendChild(el("span", "puce " + cl, txt));
+    c.appendChild(tete);
+    c.appendChild(el("p", "discret petit", (MARCHES[p.marche] || p.marche) + (Number(p.carte) > 0 ? " · carte " + p.carte : "")));
+    c.appendChild(el("p", null, libSelection(p) + " · cote " + fmtNb(p.cote_prise, 2) + " · mise " + euros(p.mise)));
+    if (p.statut !== "en_cours" && aVal(p.gain)) c.appendChild(el("p", "petit", "Résultat : " + (Number(p.gain) >= 0 ? "+" : "−") + euros(Math.abs(Number(p.gain)))));
+    const pied = el("div", "prev-pied");
+    pied.appendChild(el("span", "puce fantome-puce", p.mode === "ombre" ? "FANTÔME · ombre" : "FANTÔME"));
+    pied.appendChild(el("span", "discret petit", nomRegle(reglesParId, p.regle_id) + (p.moment ? " · " + MOMENTS[p.moment] : "") + " · " + heurePar(p.cree_le)));
+    c.appendChild(pied);
+    return c;
+  }
+
   /* ---------- écran Analyse (v2.8) : test à blanc ---------- */
   // L'appli n'affiche que ce que l'analyse exporte : aucune statistique n'est calculée ici.
   let anaPrev = [], anaSyn = null, anaFiltre = "carte", anaLarge = true;
@@ -458,7 +612,8 @@
     if (e === 0) return "Aujourd'hui";
     if (e === -1) return "Hier";
     if (e === 1) return "Demain";
-    return new Date(iso).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris", weekday: "long", day: "numeric", month: "long" });
+    const j = new Date(iso).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris", weekday: "long", day: "numeric", month: "long" });
+    return j.charAt(0).toUpperCase() + j.slice(1);
   }
   function pointDe(p) { // vue "favori" : équipe 1 si p >= 0,5, sinon équipe 2
     const un = Number(p.p_equipe1) >= 0.5;

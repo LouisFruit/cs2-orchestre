@@ -502,7 +502,7 @@
     return txt;
   }
   function titrePrevision(p) {
-    const carte = aVal(p.carte_no) ? "carte " + p.carte_no : "chaque carte";
+    const carte = Number(p.carte_no) > 0 ? "carte " + p.carte_no : "avant le match";
     return (p.equipe1_nom || "?") + " – " + (p.equipe2_nom || "?") + " · " + carte;
   }
   function sousTitrePrevision(p) {

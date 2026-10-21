@@ -208,3 +208,28 @@ details summary{cursor:pointer;font-weight:600}
 .grille .mt{margin-left:5px}
 .grille .num{font-size:.58rem;color:var(--discret);text-align:center}
 .mi{display:flex;justify-content:space-between;gap:8px;font-size:.74rem;color:var(--discret);margin:4px 0 2px}
+
+/* v2.8 : page Analyse (test à blanc) */
+.bandeau{background:#2a2412;border:1px solid #6a4a14;color:var(--retard);border-radius:10px;padding:8px 12px;margin:8px 0;font-size:.85rem}
+.bandeau.fantome{background:var(--carte);border-color:var(--bord);color:var(--discret)}
+.grise{opacity:.55}
+.ligne-kv{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--bord)}
+.ligne-kv span:last-child{text-align:right;font-weight:600}
+.ligne-kv span:first-child{font-weight:400}
+.titre-jour{margin:16px 0 4px;font-size:1rem;text-transform:capitalize}
+.carte-prev{display:block;width:100%;text-align:left;color:var(--texte);font-size:1rem}
+.carte-prev p{margin:4px 0}
+.prev-tete{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.prev-pied{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px}
+.puce{border-radius:999px;padding:1px 8px;font-size:.75rem;border:1px solid var(--bord);white-space:nowrap}
+.puce.juste{color:var(--ok);border-color:var(--ok)} .puce.rate{color:var(--rouge);border-color:var(--rouge)}
+.puce.avenir{color:var(--accent);border-color:var(--accent)} .puce.nonev,.puce.refusee{color:var(--discret)}
+.puce.peu{color:var(--retard);border-color:var(--retard)}
+.jauge{position:relative;height:10px;background:var(--bord);border-radius:5px;margin:8px 0}
+.jauge-ic{position:absolute;top:0;bottom:0;background:var(--accent);opacity:.55;border-radius:5px}
+.jauge-base{position:absolute;top:-3px;bottom:-3px;width:2px;background:#9aa7b4}
+.jauge-p{position:absolute;top:-4px;bottom:-4px;width:3px;margin-left:-1px;background:#fff;border-radius:2px}
+.jauge-mi{position:absolute;left:50%;top:12px;width:1px;height:4px;background:var(--discret)}
+.alerte-ana{border-left:4px solid var(--retard)}
+#analyse-contenu .segment{margin:8px 0}
+.sans-bientot .carte-bientot{display:none}

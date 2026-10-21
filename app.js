@@ -105,6 +105,7 @@
       majPastille();
       if (pageCourante === "collecte") await chargerCollecte();
       else if (pageCourante === "matchs") await chargerMatchs();
+      else if (pageCourante === "analyse") await chargerAnalyse();
       else if (pageCourante === "reglages") await chargerReglages();
       else if (pageCourante === "alertes") await chargerAlertes();
       else if (pageCourante === "notif") await chargerReglageNotif();
@@ -435,6 +436,275 @@
     if (rc === "a" || rt === "b") return { s1: sc, s2: st, camp1: "CT", camp2: "T" };
     if (rc === "b" || rt === "a") return { s1: st, s2: sc, camp1: "T", camp2: "CT" };
     return null;
+  }
+
+  /* ---------- écran Analyse (v2.8) : test à blanc ---------- */
+  // L'appli n'affiche que ce que l'analyse exporte : aucune statistique n'est calculée ici.
+  let anaPrev = [], anaSyn = null, anaFiltre = "carte", anaLarge = true;
+  const TIERS = { s: "Tier S", a: "Tier A", b: "Tier B", sa_estime: "S/A (estimé)" };
+
+  function fmtNb(x, d) { return x === null || x === undefined || x === "" ? "—" : Number(x).toLocaleString("fr-FR", { maximumFractionDigits: d === undefined ? 1 : d }); }
+  function fmtPct(x) { return x === null || x === undefined || x === "" ? "—" : fmtNb(Number(x) * 100, 1) + " %"; }
+  function aVal(x) { return x !== null && x !== undefined && x !== ""; }
+  function libTier(t) { return !aVal(t) ? "—" : (TIERS[String(t).toLowerCase()] || String(t)); }
+  function listeJson(x) {
+    if (Array.isArray(x)) return x;
+    if (typeof x === "string") { try { const v = JSON.parse(x); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
+    return [];
+  }
+  function libJour(iso) {
+    if (!iso) return "Date inconnue";
+    const e = ecartJours(iso);
+    if (e === 0) return "Aujourd'hui";
+    if (e === -1) return "Hier";
+    if (e === 1) return "Demain";
+    return new Date(iso).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris", weekday: "long", day: "numeric", month: "long" });
+  }
+  function pointDe(p) { // vue "favori" : équipe 1 si p >= 0,5, sinon équipe 2
+    const un = Number(p.p_equipe1) >= 0.5;
+    const f = (x) => (!aVal(x) ? null : (un ? Number(x) : 1 - Number(x)));
+    return {
+      nom: un ? p.equipe1_nom : p.equipe2_nom,
+      p: f(p.p_equipe1),
+      bas: un ? (aVal(p.p_ic_bas) ? Number(p.p_ic_bas) : null) : (aVal(p.p_ic_haut) ? 1 - Number(p.p_ic_haut) : null),
+      haut: un ? (aVal(p.p_ic_haut) ? Number(p.p_ic_haut) : null) : (aVal(p.p_ic_bas) ? 1 - Number(p.p_ic_bas) : null),
+      base: f(p.p_base)
+    };
+  }
+  function etatPrevision(p) {
+    if (p.comptage === "refusee") return { cl: "refusee", txt: "Refusée" };
+    if (p.res_statut === "non_evaluee") return { cl: "nonev", txt: "Non évaluée" };
+    if (p.res_statut === "evalue") return p.res_juste ? { cl: "juste", txt: "Juste" } : { cl: "rate", txt: "Raté" };
+    return { cl: "avenir", txt: "À venir" };
+  }
+  function jauge(f) {
+    const g = el("div", "jauge");
+    if (aVal(f.bas) && aVal(f.haut)) {
+      const b = el("div", "jauge-ic");
+      b.style.left = (Math.max(0, f.bas) * 100) + "%";
+      b.style.width = (Math.max(0, f.haut - f.bas) * 100) + "%";
+      g.appendChild(b);
+    }
+    if (aVal(f.base)) { const t = el("div", "jauge-base"); t.style.left = (f.base * 100) + "%"; g.appendChild(t); }
+    if (aVal(f.p)) { const t = el("div", "jauge-p"); t.style.left = (f.p * 100) + "%"; g.appendChild(t); }
+    g.appendChild(el("div", "jauge-mi"));
+    return g;
+  }
+  function ligneEcart(f) {
+    if (!aVal(f.base) || !aVal(f.p)) return null;
+    const pts = (f.p - f.base) * 100;
+    let txt = (pts >= 0 ? "+" : "−") + fmtNb(Math.abs(pts), 1) + " points par rapport à la base (" + fmtPct(f.base) + ")";
+    if (aVal(f.bas) && aVal(f.haut)) {
+      if (f.base < f.bas) txt += " : au-dessus de la base";
+      else if (f.base > f.haut) txt += " : en dessous de la base";
+      else txt += " : dans la marge";
+    }
+    return txt;
+  }
+  function titrePrevision(p) {
+    const carte = aVal(p.carte_no) ? "carte " + p.carte_no : "chaque carte";
+    return (p.equipe1_nom || "?") + " – " + (p.equipe2_nom || "?") + " · " + carte;
+  }
+  function sousTitrePrevision(p) {
+    const morceaux = [];
+    if (aVal(p.tournoi)) morceaux.push(p.tournoi);
+    if (p.debut_retenu_utc) morceaux.push(heureSeule(p.debut_retenu_utc));
+    if (aVal(p.format_bo)) morceaux.push("BO" + p.format_bo);
+    if (aVal(p.tier)) morceaux.push(libTier(p.tier));
+    return morceaux.join(" · ");
+  }
+
+  async function chargerAnalyse() {
+    const zone = $("analyse-contenu");
+    const [pr, sy] = await Promise.all([
+      sb.from("app_analyse_previsions").select("*").order("debut_retenu_utc", { ascending: false }).limit(300),
+      sb.from("app_analyse_synthese").select("*").order("calcule_le", { ascending: false }).limit(1)
+    ]);
+    vider(zone);
+    if (pr.error) {
+      const c = el("div", "carte");
+      c.appendChild(el("strong", null, "En attente des données"));
+      c.appendChild(el("p", "discret petit", "Les prévisions de l'analyse ne sont pas encore copiées dans l'appli. Cette page se remplira toute seule dès que ce sera le cas."));
+      zone.appendChild(c);
+      return;
+    }
+    anaPrev = pr.data || [];
+    anaSyn = !sy.error && sy.data && sy.data.length ? sy.data[0] : null;
+    dessinerAnalyse();
+  }
+
+  function dessinerAnalyse() {
+    const zone = $("analyse-contenu");
+    vider(zone);
+    const s = anaSyn || {};
+
+    // Filtres
+    const fl = el("div", "filtres");
+    [["carte", "Vainqueur de carte"], ["match", "Vainqueur du match (non testée)"]].forEach(([k, t]) => {
+      const b = el("button", "filtre" + (anaFiltre === k ? " actif" : "") + (k === "match" ? " grise" : ""), t);
+      b.addEventListener("click", () => { anaFiltre = k; dessinerAnalyse(); });
+      fl.appendChild(b);
+    });
+    zone.appendChild(fl);
+
+    if (anaFiltre === "match") {
+      zone.appendChild(el("div", "bandeau", "Probabilité de match : non testée. Elle reste indicative tant qu'il y a moins de 30 matchs avec résultat. Elle ne compte dans aucune statistique."));
+    }
+
+    // Bandeau échantillon faible
+    const nC = aVal(s.n_cartes_principal) ? Number(s.n_cartes_principal) : null;
+    const nM = aVal(s.n_matchs_principal) ? Number(s.n_matchs_principal) : null;
+    if (nC === null || nM === null || nC < 30 || nM < 20) {
+      zone.appendChild(el("div", "bandeau", "Échantillon faible : " + fmtNb(nC, 0) + " cartes et " + fmtNb(nM, 0) + " matchs dans le groupe principal. Il faut au moins 30 cartes et 20 matchs avant de tirer une conclusion."));
+    }
+    zone.appendChild(el("div", "bandeau fantome", "👻 Test à blanc : prévisions seulement, aucun argent."));
+
+    // Carte résumé
+    const aVenir = anaPrev.filter((p) => etatPrevision(p).cl === "avenir").length;
+    const r = el("div", "carte");
+    r.appendChild(el("strong", null, "Résumé"));
+    const lignes = [
+      ["Prévisions dans le groupe principal", fmtNb(s.n_cartes_principal, 0) + " cartes · " + fmtNb(s.n_matchs_principal, 0) + " matchs"],
+      ["Comptées à part (équipe peu vue)", fmtNb(s.n_cartes_a_part, 0) + " cartes"],
+      ["En attente de résultat", String(aVenir)],
+      ["Réussite observée", fmtPct(s.reussite) + (aVal(s.reussite_ic_bas) ? " (entre " + fmtPct(s.reussite_ic_bas) + " et " + fmtPct(s.reussite_ic_haut) + ")" : "")],
+      ["Taux attendu (moyenne des probabilités annoncées)", fmtPct(s.attendu)],
+      ["Brier", aVal(s.brier) ? fmtNb(s.brier, 3) + (aVal(s.brier_ic_bas) ? " (entre " + fmtNb(s.brier_ic_bas, 3) + " et " + fmtNb(s.brier_ic_haut, 3) + ")" : "") + " · référence « toujours 50 % » : " + fmtNb(s.brier_ref || 0.25, 3) : "— (dès 30 cartes)"],
+      ["Perte logarithmique", aVal(s.log_loss) ? fmtNb(s.log_loss, 3) + " · référence : " + fmtNb(s.log_loss_ref || 0.693, 3) : "— (dès 30 cartes)"],
+      ["Version des réglages", aVal(s.version_reglages) ? s.version_reglages : "—"]
+    ];
+    lignes.forEach(([k, v]) => {
+      const l = el("div", "ligne-kv");
+      l.appendChild(el("span", "discret petit", k));
+      l.appendChild(el("span", null, v));
+      r.appendChild(l);
+    });
+    if (s.intervalle_indicatif) r.appendChild(el("p", "discret petit", "Intervalles indicatifs : moins de 20 matchs. Ils sont calculés par match par l'analyse."));
+    else if (aVal(s.reussite_ic_bas)) r.appendChild(el("p", "discret petit", "Intervalles calculés par match par l'analyse."));
+    zone.appendChild(r);
+
+    // Calibration
+    const cal = listeJson(s.calibration).filter((t) => (anaLarge ? t.largeur === "large" : t.largeur !== "large"));
+    const c = el("div", "carte");
+    c.appendChild(el("strong", null, "Prévu contre réalisé"));
+    const seg = el("div", "segment");
+    [[true, "Tranches larges"], [false, "Tranches de 5 points"]].forEach(([v, t]) => {
+      const b = el("button", anaLarge === v ? "actif" : null, t);
+      b.addEventListener("click", () => { anaLarge = v; dessinerAnalyse(); });
+      seg.appendChild(b);
+    });
+    c.appendChild(seg);
+    if (!cal.length) c.appendChild(el("p", "discret petit", "Pas encore de tranche à afficher."));
+    cal.forEach((t) => {
+      const ok = aVal(t.observe) && Number(t.n_cartes) >= 20;
+      const l = el("div", "ligne-kv" + (ok ? "" : " grise"));
+      l.appendChild(el("span", null, "Tranche " + (t.tranche || "—") + " · " + fmtNb(t.n_cartes, 0) + " cartes, " + fmtNb(t.n_matchs, 0) + " matchs"));
+      l.appendChild(el("span", null, ok ? fmtPct(t.observe) + (aVal(t.ic_bas) ? " (" + fmtPct(t.ic_bas) + " à " + fmtPct(t.ic_haut) + ")" : "") : "— (dès 20 cartes)"));
+      c.appendChild(l);
+    });
+    c.appendChild(el("p", "discret petit", "Une tranche n'est lue qu'à partir de 20 cartes. Pas de conclusion globale avant environ 100 cartes."));
+    zone.appendChild(c);
+
+    // Alertes de l'analyse
+    const al = [];
+    if (s.derive) al.push("Dérive de calibration signalée par l'analyse (calcul du dimanche).");
+    if (aVal(s.nouvelle_version_motif)) al.push("Nouvelle version des réglages : " + s.nouvelle_version_motif);
+    if (Number(s.n_refus_selection) > 0) al.push(s.n_refus_selection + " match(s) non prévus (équipe à déterminer, tier incertain ou statut non admis).");
+    anaPrev.filter((p) => p.comptage === "refusee").forEach((p) => al.push("Prévision refusée : " + titrePrevision(p) + (aVal(p.raison_refus) ? " (" + p.raison_refus + ")" : "")));
+    const limite = Date.now() - 48 * 3600 * 1000;
+    anaPrev.filter((p) => p.comptage !== "refusee" && !p.res_statut && p.debut_retenu_utc && new Date(p.debut_retenu_utc).getTime() < limite)
+      .forEach((p) => al.push("Résultat manquant depuis plus de 48 h : " + titrePrevision(p)));
+    if (al.length) {
+      const a = el("div", "carte alerte-ana");
+      a.appendChild(el("strong", null, "Alertes de l'analyse"));
+      al.forEach((t) => a.appendChild(el("p", "petit", "• " + t)));
+      zone.appendChild(a);
+    }
+
+    // Cartes de prévision, groupées par jour de Paris
+    const liste = anaPrev.filter((p) => p.comptage !== "refusee" && (anaFiltre === "match" ? aVal(p.p_match_equipe1) : p.type_prevision !== "match"));
+    if (!liste.length) { zone.appendChild(el("p", "discret", "Aucune prévision à afficher.")); return; }
+    let jourCourant = null;
+    liste.forEach((p) => {
+      const j = p.debut_retenu_utc ? jourParis(p.debut_retenu_utc) : "?";
+      if (j !== jourCourant) { jourCourant = j; zone.appendChild(el("h3", "titre-jour", libJour(p.debut_retenu_utc))); }
+      zone.appendChild(cartePrevision(p));
+    });
+  }
+
+  function cartePrevision(p) {
+    const b = el("button", "carte carte-prev");
+    const e = etatPrevision(p);
+    const f = anaFiltre === "match"
+      ? pointDe({ equipe1_nom: p.equipe1_nom, equipe2_nom: p.equipe2_nom, p_equipe1: p.p_match_equipe1 })
+      : pointDe(p);
+    const tete = el("div", "prev-tete");
+    tete.appendChild(el("strong", null, titrePrevision(p)));
+    tete.appendChild(el("span", "puce " + e.cl, e.txt));
+    b.appendChild(tete);
+    b.appendChild(el("p", "discret petit", sousTitrePrevision(p)));
+    if (aVal(f.p)) {
+      b.appendChild(jauge(f));
+      let t = (f.nom || "?") + " favorite : " + fmtPct(f.p);
+      if (aVal(f.bas) && aVal(f.haut)) t += " (entre " + fmtPct(f.bas) + " et " + fmtPct(f.haut) + ")";
+      b.appendChild(el("p", anaFiltre === "match" ? "grise" : null, t));
+      const ec = ligneEcart(f);
+      if (ec && anaFiltre !== "match") b.appendChild(el("p", "discret petit", ec));
+    } else {
+      b.appendChild(el("p", "discret", "Probabilité : —"));
+    }
+    if (p.res_statut === "evalue") {
+      const g = p.res_gagnant === 1 ? p.equipe1_nom : p.res_gagnant === 2 ? p.equipe2_nom : null;
+      b.appendChild(el("p", "petit", "Gagnant : " + (g || "—") + (aVal(p.res_score1) ? " · " + p.res_score1 + "–" + p.res_score2 : "")));
+    } else if (p.res_statut === "non_evaluee") {
+      b.appendChild(el("p", "discret petit", "Carte non jouée" + (aVal(p.res_raison) ? " : " + p.res_raison : "") + ". Exclue de tous les calculs."));
+    }
+    const pied = el("div", "prev-pied");
+    if (p.drapeau_peu_vue) pied.appendChild(el("span", "puce peu", "Équipe peu vue" + (aVal(p.equipe_peu_vue) ? " : " + p.equipe_peu_vue : "")));
+    pied.appendChild(el("span", "discret petit", aVal(p.version_reglages) ? p.version_reglages : "version —"));
+    b.appendChild(pied);
+    b.addEventListener("click", () => ouvrirPrevision(p));
+    return b;
+  }
+
+  function ouvrirPrevision(p) {
+    ficheDirectId = null;
+    $("fiche-titre").textContent = titrePrevision(p);
+    $("fiche-sous").textContent = "Pourquoi cette prévision ?";
+    vider($("fiche-badges"));
+    const zone = $("fiche-detail");
+    vider(zone);
+    const f = pointDe(p);
+    const bloc = (titre, lignes) => {
+      const c = el("div", "carte");
+      c.appendChild(el("strong", null, titre));
+      lignes.forEach((t) => c.appendChild(el("p", "petit", t)));
+      zone.appendChild(c);
+    };
+    const un = Number(p.p_equipe1) >= 0.5;
+    const eq = (n) => p["equipe" + n + "_nom"] || "?";
+    let force = "Notes de force : " + eq(1) + " " + fmtNb(p.note1, 0) + " contre " + eq(2) + " " + fmtNb(p.note2, 0);
+    if (aVal(p.force_tranche)) force += " (" + String(p.force_tranche).replace(/_/g, " ") + ")";
+    bloc("Force", [force + "."]);
+    bloc("Solidité", [
+      eq(1) + " : " + fmtNb(p.nb_cartes_1, 0) + " cartes vues, dernière le " + (aVal(p.derniere_carte_1) ? new Date(p.derniere_carte_1).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" }) : "—"),
+      eq(2) + " : " + fmtNb(p.nb_cartes_2, 0) + " cartes vues, dernière le " + (aVal(p.derniere_carte_2) ? new Date(p.derniere_carte_2).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" }) : "—")
+    ].concat(p.drapeau_peu_vue ? ["Équipe peu vue : prévision comptée à part, hors calibration principale."] : []));
+    bloc("Contexte", [[aVal(p.tournoi) ? p.tournoi : null, aVal(p.format_bo) ? "BO" + p.format_bo : null, aVal(p.tier) ? libTier(p.tier) : null, p.debut_retenu_utc ? "début retenu " + heurePar(p.debut_retenu_utc) : null].filter(Boolean).join(" · ") || "—"]);
+    const prob = [(f.nom || "?") + " : " + fmtPct(f.p) + (aVal(f.bas) ? " (entre " + fmtPct(f.bas) + " et " + fmtPct(f.haut) + ")" : "")];
+    const ec = ligneEcart(f);
+    prob.push(ec || "Base sans condition : —");
+    if (aVal(p.tranche)) prob.push("Tranche : " + p.tranche);
+    bloc("Probabilité", prob);
+    bloc("Version et preuve", [
+      "Réglages : " + (aVal(p.version_reglages) ? p.version_reglages : "—") + (aVal(p.version_date) ? " (" + new Date(p.version_date).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" }) + ")" : ""),
+      "Données jusqu'au : " + heurePar(p.donnees_jusqu_au),
+      "Prévision créée le : " + heurePar(p.cree_le),
+      "Empreinte du fichier (SHA-256) : " + (aVal(p.sha256_fichier) ? p.sha256_fichier : "—"),
+      "Fichier : " + (aVal(p.nom_fichier) ? p.nom_fichier : "—")
+    ]);
+    $("fiche").classList.add("sans-bientot");
+    $("fiche").classList.remove("cache");
   }
 
   /* ---------- écran Matchs ---------- */
@@ -1448,7 +1718,7 @@
     }
     $("fiche").classList.remove("cache");
   }
-  function fermerFiche() { ficheDirectId = null; $("fiche").classList.add("cache"); }
+  function fermerFiche() { ficheDirectId = null; $("fiche").classList.add("cache"); $("fiche").classList.remove("sans-bientot"); }
   $("fiche-fermer").addEventListener("click", fermerFiche);
   $("fiche").addEventListener("click", (e) => { if (e.target === $("fiche")) fermerFiche(); });
 

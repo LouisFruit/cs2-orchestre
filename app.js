@@ -548,7 +548,7 @@
     });
     c2.appendChild(seg);
     if (parisGroupe === "profil") {
-      c2.appendChild(el("p", "discret petit", "Profils safe, modéré et risky : bientôt, dès que les règles de l'analyse (v1 du 24/11) les définissent."));
+      c2.appendChild(el("p", "discret petit", "Profils safe, modéré et risky : à venir, dès que les règles de l'analyse (v1 du 24/11) les définissent."));
     } else if (!d.roi.length) {
       c2.appendChild(el("p", "discret petit", "Aucun pari réglé pour l'instant : pas de ROI à afficher."));
     } else {
@@ -720,7 +720,7 @@
     if (nC === null || nM === null || nC < 30 || nM < 20) {
       zone.appendChild(el("div", "bandeau", "Échantillon faible : " + fmtNb(nC, 0) + " cartes et " + fmtNb(nM, 0) + " matchs dans le groupe principal. Il faut au moins 30 cartes et 20 matchs avant de tirer une conclusion."));
     }
-    zone.appendChild(el("div", "bandeau fantome", "👻 Test à blanc : prévisions seulement, aucun argent."));
+    zone.appendChild(el("div", "bandeau fantome", "👻 FANTÔME : prévisions seulement, aucun argent réel."));
 
     // Carte résumé
     const aVenir = anaPrev.filter((p) => etatPrevision(p).cl === "avenir").length;

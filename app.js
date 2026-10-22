@@ -663,7 +663,7 @@
   function sousTitrePrevision(p) {
     const morceaux = [];
     if (aVal(p.tournoi)) morceaux.push(p.tournoi);
-    if (p.debut_retenu_utc) morceaux.push(heureSeule(p.debut_retenu_utc));
+    if (p.debut_aff) morceaux.push(heureSeule(p.debut_aff));
     if (aVal(p.format_bo)) morceaux.push("BO" + p.format_bo);
     if (aVal(p.tier)) morceaux.push(libTier(p.tier));
     return morceaux.join(" · ");
@@ -683,7 +683,9 @@
       zone.appendChild(c);
       return;
     }
-    anaPrev = pr.data || [];
+    anaPrev = (pr.data || []).slice();
+    anaPrev.forEach((p) => { p.debut_aff = p.debut_retenu_utc || p.debut_saisie_utc || null; });
+    anaPrev.sort((a, b) => (b.debut_aff || "").localeCompare(a.debut_aff || ""));
     anaSyn = !sy.error && sy.data && sy.data.length ? sy.data[0] : null;
     dessinerAnalyse();
   }
@@ -724,8 +726,8 @@
       ["En attente de résultat", String(aVenir)],
       ["Réussite observée", fmtPct(s.reussite) + (aVal(s.reussite_ic_bas) ? " (entre " + fmtPct(s.reussite_ic_bas) + " et " + fmtPct(s.reussite_ic_haut) + ")" : "")],
       ["Taux attendu (moyenne des probabilités annoncées)", fmtPct(s.attendu)],
-      ["Brier", aVal(s.brier) ? fmtNb(s.brier, 3) + (aVal(s.brier_ic_bas) ? " (entre " + fmtNb(s.brier_ic_bas, 3) + " et " + fmtNb(s.brier_ic_haut, 3) + ")" : "") + " · référence « toujours 50 % » : " + fmtNb(s.brier_ref || 0.25, 3) : "— (dès 30 cartes)"],
-      ["Perte logarithmique", aVal(s.log_loss) ? fmtNb(s.log_loss, 3) + " · référence : " + fmtNb(s.log_loss_ref || 0.693, 3) : "— (dès 30 cartes)"],
+      ["Brier", aVal(s.brier) && nC !== null && nC >= 30 ? fmtNb(s.brier, 3) + (aVal(s.brier_ic_bas) ? " (entre " + fmtNb(s.brier_ic_bas, 3) + " et " + fmtNb(s.brier_ic_haut, 3) + ")" : "") + " · référence « toujours 50 % » : " + fmtNb(s.brier_ref || 0.25, 3) : "— (dès 30 cartes)"],
+      ["Perte logarithmique", aVal(s.log_loss) && nC !== null && nC >= 30 ? fmtNb(s.log_loss, 3) + " · référence : " + fmtNb(s.log_loss_ref || 0.693, 3) : "— (dès 30 cartes)"],
       ["Version des réglages", aVal(s.version_reglages) ? s.version_reglages : "—"]
     ];
     lignes.forEach(([k, v]) => {
@@ -739,21 +741,25 @@
     zone.appendChild(r);
 
     // Calibration
-    const cal = listeJson(s.calibration).filter((t) => (anaLarge ? t.largeur === "large" : t.largeur !== "large"));
+    const toutes = listeJson(s.calibration);
+    const aLarges = toutes.some((t) => t.largeur === "large");
+    const largeEff = anaLarge && aLarges;
+    const cal = toutes.filter((t) => (largeEff ? t.largeur === "large" : t.largeur !== "large"));
     const c = el("div", "carte");
     c.appendChild(el("strong", null, "Prévu contre réalisé"));
     const seg = el("div", "segment");
     [[true, "Tranches larges"], [false, "Tranches de 5 points"]].forEach(([v, t]) => {
-      const b = el("button", anaLarge === v ? "actif" : null, t);
+      const b = el("button", largeEff === v ? "actif" : null, t);
       b.addEventListener("click", () => { anaLarge = v; dessinerAnalyse(); });
       seg.appendChild(b);
     });
     c.appendChild(seg);
+    if (anaLarge && !aLarges) c.appendChild(el("p", "discret petit", "Tranches larges : pas encore définies par l'analyse. Les tranches de 5 points sont affichées."));
     if (!cal.length) c.appendChild(el("p", "discret petit", "Pas encore de tranche à afficher."));
     cal.forEach((t) => {
       const ok = aVal(t.observe) && Number(t.n_cartes) >= 20;
       const l = el("div", "ligne-kv" + (ok ? "" : " grise"));
-      l.appendChild(el("span", null, "Tranche " + (t.tranche || "—") + " · " + fmtNb(t.n_cartes, 0) + " cartes, " + fmtNb(t.n_matchs, 0) + " matchs"));
+      l.appendChild(el("span", null, "Tranche " + (t.tranche || "—") + " · " + fmtNb(t.n_cartes, 0) + " cartes, " + fmtNb(t.n_matchs, 0) + (Number(t.n_matchs) > 1 ? " matchs" : " match")));
       l.appendChild(el("span", null, ok ? fmtPct(t.observe) + (aVal(t.ic_bas) ? " (" + fmtPct(t.ic_bas) + " à " + fmtPct(t.ic_haut) + ")" : "") : "— (dès 20 cartes)"));
       c.appendChild(l);
     });
@@ -767,7 +773,7 @@
     if (Number(s.n_refus_selection) > 0) al.push(s.n_refus_selection + " match(s) non prévus (équipe à déterminer, tier incertain ou statut non admis).");
     anaPrev.filter((p) => p.comptage === "refusee").forEach((p) => al.push("Prévision refusée : " + titrePrevision(p) + (aVal(p.raison_refus) ? " (" + p.raison_refus + ")" : "")));
     const limite = Date.now() - 48 * 3600 * 1000;
-    anaPrev.filter((p) => p.comptage !== "refusee" && !p.res_statut && p.debut_retenu_utc && new Date(p.debut_retenu_utc).getTime() < limite)
+    anaPrev.filter((p) => p.comptage !== "refusee" && !p.res_statut && p.debut_aff && new Date(p.debut_aff).getTime() < limite)
       .forEach((p) => al.push("Résultat manquant depuis plus de 48 h : " + titrePrevision(p)));
     if (al.length) {
       const a = el("div", "carte alerte-ana");
@@ -781,8 +787,8 @@
     if (!liste.length) { zone.appendChild(el("p", "discret", "Aucune prévision à afficher.")); return; }
     let jourCourant = null;
     liste.forEach((p) => {
-      const j = p.debut_retenu_utc ? jourParis(p.debut_retenu_utc) : "?";
-      if (j !== jourCourant) { jourCourant = j; zone.appendChild(el("h3", "titre-jour", libJour(p.debut_retenu_utc))); }
+      const j = p.debut_aff ? jourParis(p.debut_aff) : "?";
+      if (j !== jourCourant) { jourCourant = j; zone.appendChild(el("h3", "titre-jour", libJour(p.debut_aff))); }
       zone.appendChild(cartePrevision(p));
     });
   }
@@ -845,7 +851,7 @@
       eq(1) + " : " + fmtNb(p.nb_cartes_1, 0) + " cartes vues, dernière le " + (aVal(p.derniere_carte_1) ? new Date(p.derniere_carte_1).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" }) : "—"),
       eq(2) + " : " + fmtNb(p.nb_cartes_2, 0) + " cartes vues, dernière le " + (aVal(p.derniere_carte_2) ? new Date(p.derniere_carte_2).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" }) : "—")
     ].concat(p.drapeau_peu_vue ? ["Équipe peu vue : prévision comptée à part, hors calibration principale."] : []));
-    bloc("Contexte", [[aVal(p.tournoi) ? p.tournoi : null, aVal(p.format_bo) ? "BO" + p.format_bo : null, aVal(p.tier) ? libTier(p.tier) : null, p.debut_retenu_utc ? "début retenu " + heurePar(p.debut_retenu_utc) : null].filter(Boolean).join(" · ") || "—"]);
+    bloc("Contexte", [[aVal(p.tournoi) ? p.tournoi : null, aVal(p.format_bo) ? "BO" + p.format_bo : null, aVal(p.tier) ? libTier(p.tier) : null, p.debut_aff ? (p.debut_retenu_utc ? "début retenu " : "début annoncé ") + heurePar(p.debut_aff) : null].filter(Boolean).join(" · ") || "—"]);
     const prob = [(f.nom || "?") + " : " + fmtPct(f.p) + (aVal(f.bas) ? " (entre " + fmtPct(f.bas) + " et " + fmtPct(f.haut) + ")" : "")];
     const ec = ligneEcart(f);
     prob.push(ec || "Base sans condition : —");

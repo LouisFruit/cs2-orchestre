@@ -264,3 +264,12 @@ details summary{cursor:pointer;font-weight:600}
 .section-chevron{width:14px;color:var(--discret);font-size:.9rem}
 .section-corps{margin-top:6px}
 .section-corps.exports .niveau:first-of-type{border-top:0}
+
+/* v2.22 : page Matchs rangée par tier, avec couleurs */
+.section-tete.live{color:var(--rouge);border-left-color:var(--rouge)}
+.section-tete.tier-s{color:#c792ea;border-left-color:#c792ea}
+.section-tete.tier-a{color:var(--accent);border-left-color:var(--accent)}
+.section-tete.tier-b,.section-tete.tier-x{color:var(--discret);border-left-color:var(--veille)}
+.match.tier-s{border-left:4px solid #c792ea}
+.match.tier-a{border-left:4px solid var(--accent)}
+.match.tier-b{border-left:4px solid var(--veille)}

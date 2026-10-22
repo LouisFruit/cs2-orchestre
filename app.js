@@ -131,14 +131,16 @@
 
   /* ---------- sections de la page Collecte : titre en évidence, pastille d'état, repli (v2.20) ---------- */
   const sectionsFermees = {};
-  function section(cle, titre, statut, nb) {
+  function section(cle, titre, statut, nb, opts) {
+    opts = opts || {};
     const racine = el("section", "section-bloc");
     const tete = el("button", "section-tete " + statut);
     tete.type = "button";
     tete.appendChild(el("span", "section-titre", titre));
     if (nb !== undefined && nb !== null) tete.appendChild(el("span", "section-nb", String(nb)));
-    tete.appendChild(el("span", "voyant " + statut));
-    const peutPlier = statut === "ok" || statut === "en_veille";
+    if (!opts.sansPastille) tete.appendChild(el("span", "voyant " + statut));
+    const peutPlier = opts.pliable !== undefined ? opts.pliable : (statut === "ok" || statut === "en_veille");
+    if (opts.ferme && sectionsFermees[cle] === undefined) sectionsFermees[cle] = true;
     const chevron = el("span", "section-chevron", "");
     tete.appendChild(chevron);
     const corps = el("div", "section-corps");
@@ -1149,7 +1151,7 @@
         g.cleTri = venir.length ? t(venir[0]) : Infinity;
         g.cleFin = fini.length ? t(fini[0]) : 0;
       });
-      if (filtreMatchs === "tier") groupes.sort((x, y) => x.cle.localeCompare(y.cle));
+      if (filtreMatchs === "tier") { const rang = (c) => { const i = ["s", "a", "b", "zz"].indexOf(c); return i < 0 ? 9 : i; }; groupes.sort((x, y) => rang(x.cle) - rang(y.cle)); }
       else groupes.sort((x, y) => (x.cleTri !== y.cleTri) ? (x.cleTri < y.cleTri ? -1 : 1) : y.cleFin - x.cleFin);
     }
     return groupes;
@@ -1173,15 +1175,36 @@
     direct.sort((x, y) => String((y.lm && y.lm.dernier_round_le) || "").localeCompare(String((x.lm && x.lm.dernier_round_le) || "")));
 
     // 1. En direct : toujours en premier, quel que soit le filtre
-    liste.appendChild(el("h3", "groupe-titre", "En direct (" + direct.length + ")"));
-    if (!direct.length) liste.appendChild(el("p", "discret petit", "Aucun match en direct pour le moment."));
-    direct.forEach(({ m, lm }) => liste.appendChild(lm ? carteDirect(lm) : carteMatch(m)));
+    const secD = section("m-direct", "En direct", "live", direct.length, { sansPastille: true, pliable: false });
+    liste.appendChild(secD.racine);
+    if (!direct.length) secD.corps.appendChild(el("p", "discret petit", "Aucun match en direct pour le moment."));
+    direct.forEach(({ m, lm }) => secD.corps.appendChild(lm ? carteDirect(lm) : carteMatch(m)));
 
-    // 2. Le reste, regroupé selon le filtre
-    groupesMatchs(autres).forEach((g) => {
-      liste.appendChild(el("h3", "groupe-titre", g.titre + " (" + g.items.length + ")"));
-      g.items.forEach(({ m }) => liste.appendChild(carteMatch(m)));
-    });
+    // 2. Le reste, regroupé selon le filtre ; les petits tournois (tier B) sont rangés à part, repliés
+    const estB = (it) => String(it.m.tier || "").toLowerCase() === "b";
+    if (filtreMatchs === "tier") {
+      groupesMatchs(autres).forEach((g) => {
+        const s = section("m-tier-" + g.cle, g.titre, "tier-" + (g.cle === "zz" ? "x" : g.cle), g.items.length, { sansPastille: true, pliable: true, ferme: g.cle === "b" });
+        g.items.forEach(({ m }) => s.corps.appendChild(carteMatch(m)));
+        liste.appendChild(s.racine);
+      });
+    } else {
+      const hauts = autres.filter((it) => !estB(it)), bas = autres.filter(estB);
+      groupesMatchs(hauts).forEach((g) => {
+        const s = section("m-" + filtreMatchs + "-" + g.cle, g.titre, "groupe", g.items.length, { sansPastille: true, pliable: true });
+        g.items.forEach(({ m }) => s.corps.appendChild(carteMatch(m)));
+        liste.appendChild(s.racine);
+      });
+      if (bas.length) {
+        const sb2 = section("m-tierb", "Tier B : petits tournois", "tier-b", bas.length, { sansPastille: true, pliable: true, ferme: true });
+        sb2.corps.appendChild(el("p", "discret petit", "Les matchs de tier B sont rangés ici pour alléger la liste. Touche le titre pour les déplier."));
+        groupesMatchs(bas).forEach((g) => {
+          sb2.corps.appendChild(el("h3", "groupe-titre", g.titre + " (" + g.items.length + ")"));
+          g.items.forEach(({ m }) => sb2.corps.appendChild(carteMatch(m)));
+        });
+        liste.appendChild(sb2.racine);
+      }
+    }
 
     // 3. Sans confirmation (replié)
     if (inconnu.length) {
@@ -1199,7 +1222,7 @@
   }
 
   function carteMatch(m) {
-    const bouton = el("button", "match");
+    const bouton = el("button", "match tier-" + (m.tier ? String(m.tier).toLowerCase() : "x"));
     bouton.type = "button";
     const fini = m.statut_match === "termine";
     const haut = el("div", "ligne-haut");

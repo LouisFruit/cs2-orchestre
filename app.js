@@ -520,7 +520,12 @@
   }
 
   /* ---------- détail d'une source : tout ce qu'elle collecte ---------- */
-  function nomExport(src) { const n = src.replace(/^Export /, ""); return n.charAt(0).toUpperCase() + n.slice(1); }
+  function nomExport(src) {
+    const n = src.replace(/^Export /, "");
+    const noms = { hltv_debuts: "Débuts réels des matchs (HLTV)", matchs_a_venir: "Liste des matchs à venir" };
+    if (noms[n.toLowerCase()]) return noms[n.toLowerCase()];
+    return n.charAt(0).toUpperCase() + n.slice(1);
+  }
   function nombre(n) { return n === null || n === undefined ? "—" : Number(n).toLocaleString("fr-FR"); }
 
   async function ouvrirSource(src) {

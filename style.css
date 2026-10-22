@@ -201,7 +201,9 @@ details summary{cursor:pointer;font-weight:600}
 .grille{display:grid;gap:3px;align-items:center}
 .grille .cell{height:22px;border-radius:4px;display:flex;align-items:center;justify-content:center;
   font-size:.62rem;font-weight:700;color:#0b0f14}
-.grille .cell.a{background:var(--ea)} .grille .cell.b{background:var(--eb)}
+.grille .cell.ct{background:var(--accent)} .grille .cell.t{background:var(--rouge)}
+.grille .nom-ligne{grid-column:1/-1;font-size:.8rem;font-weight:600;margin-top:4px}
+.leg-cote.ct{color:var(--accent)} .leg-cote.t{color:var(--rouge)}
 .grille .cell.futur{border:1px dashed #2a3442}
 .grille .cell.vide{border:1px solid #1c2531}
 .grille .cell.cur{outline:2px solid #fff}
@@ -238,3 +240,4 @@ details summary{cursor:pointer;font-weight:600}
 .gros-nombre{font-size:1.6rem;font-weight:700;margin:4px 0}
 .courbe{width:100%;height:110px;color:var(--accent);margin:6px 0}
 .puce.fantome-puce{color:var(--discret);border-style:dashed}
+.leg-rounds{font-size:.85rem}

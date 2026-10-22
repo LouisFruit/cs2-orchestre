@@ -1299,14 +1299,15 @@
     const cols = Math.max(24, dernier);
     const wrap = el("div", "grille-rounds");
     const leg = el("div", "leg-rounds");
-    leg.appendChild(el("span", "eq-a", "■ " + rg.nomA));
-    leg.appendChild(el("span", "eq-b", "■ " + rg.nomB));
+    leg.appendChild(el("span", "leg-cote ct", "■ Côté CT"));
+    leg.appendChild(el("span", "leg-cote t", "■ Côté T"));
     wrap.appendChild(leg);
     const g = el("div", "grille");
     g.style.gridTemplateColumns = "repeat(" + cols + ", 1fr)";
     const parNo = {};
     rs.forEach((r) => { parNo[r.round_no] = r; });
-    ["a", "b"].forEach((ligne) => {
+    [["a", rg.nomA], ["b", rg.nomB]].forEach(([ligne, nom]) => {
+      g.appendChild(el("div", "nom-ligne", nom));
       for (let i = 1; i <= cols; i++) {
         const r = parNo[i];
         let cl = "cell";
@@ -1314,8 +1315,12 @@
         if (!r) cl += " futur";
         else {
           const w = rg.rang[gagnantRound(r)];
-          if (w === ligne) { cl += " " + ligne; if (r.pistol) txt = "P"; if (vivant && i === dernier) cl += " cur"; }
-          else cl += " vide";
+          if (w === ligne) {
+            const cote = r.winner_side ? (String(r.winner_side).toUpperCase() === "CT" ? "ct" : "t") : (r.ct_team && r.ct_team === gagnantRound(r) ? "ct" : "t");
+            cl += " " + cote;
+            if (r.pistol) txt = "P";
+            if (vivant && i === dernier) cl += " cur";
+          } else cl += " vide";
         }
         if (i === 13) cl += " mt";
         g.appendChild(el("div", cl, txt));

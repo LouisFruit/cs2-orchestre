@@ -1236,6 +1236,8 @@
     const mm = matchsCache.find((x) => x.id === m.maitre_id);
     if (mm) zb.appendChild(badgesLiaison(mm));
     remplirDetailDirect(m);
+    ficheToken++;
+    chargerAnalyseMatch(m, ficheToken);
     $("fiche").classList.remove("cache");
   }
 
@@ -1844,6 +1846,54 @@
   });
 
   /* ---------- fiche d'un match ---------- */
+  /* ---------- prévision de l'analyse dans la fiche d'un match (v2.13) ---------- */
+  async function chargerAnalyseMatch(m, token) {
+    const carte = $("fiche-analyse"), corps = $("fiche-analyse-corps");
+    vider(corps);
+    carte.classList.add("cache");
+    if (!m.hltv_match_id) return;
+    try {
+      const r = await sb.from("app_analyse_previsions").select("*").eq("hltv_match_id", String(m.hltv_match_id));
+      if (token !== ficheToken) return;
+      if (r.error) return; // vue absente : la carte reste cachée
+      carte.classList.remove("cache");
+      let rows = r.data || [];
+      if (!rows.length) { corps.appendChild(el("p", "discret petit", "Pas de prévision de l'analyse pour ce match.")); return; }
+      rows = rows.slice().sort((a, b) => String(b.cree_le || "").localeCompare(String(a.cree_le || "")));
+      const idRetenu = rows[0].id_saisie;
+      rows = rows.filter((x) => x.id_saisie === idRetenu).sort((a, b) => Number(a.carte_no) - Number(b.carte_no));
+      const p = rows[0];
+      const f = pointDe(p);
+      if (aVal(f.p)) {
+        corps.appendChild(jauge(f));
+        let t = (f.nom || "?") + " favorite : " + fmtPct(f.p);
+        if (aVal(f.bas) && aVal(f.haut)) t += " (entre " + fmtPct(f.bas) + " et " + fmtPct(f.haut) + ")";
+        corps.appendChild(el("p", null, t));
+        const ec = ligneEcart(f);
+        if (ec) corps.appendChild(el("p", "discret petit", ec));
+      }
+      const jouees = rows.filter((x) => x.res_statut);
+      jouees.forEach((x) => {
+        const e = etatPrevision(x);
+        const l = el("div", "ligne-kv");
+        l.appendChild(el("span", null, Number(x.carte_no) > 0 ? "Carte " + x.carte_no : "Match"));
+        l.appendChild(el("span", "puce " + e.cl, e.txt));
+        corps.appendChild(l);
+      });
+      if (!jouees.length) corps.appendChild(el("p", "discret petit", "À venir : pas encore de résultat."));
+      const pied = el("div", "prev-pied");
+      if (p.drapeau_peu_vue) pied.appendChild(el("span", "puce peu", "Équipe peu vue" + (aVal(p.equipe_peu_vue) ? " : " + p.equipe_peu_vue : "")));
+      pied.appendChild(el("span", "discret petit", aVal(p.version_reglages) ? p.version_reglages : "version —"));
+      corps.appendChild(pied);
+      const bt = el("button", "bouton secondaire", "Voir dans l'analyse");
+      bt.type = "button";
+      bt.addEventListener("click", () => { fermerFiche(); aller("analyse"); });
+      corps.appendChild(bt);
+    } catch (err) {
+      carte.classList.add("cache");
+    }
+  }
+
   function ouvrirFiche(m) {
     $("fiche-titre").textContent = (m.team1 || "?") + " – " + (m.team2 || "?");
     $("fiche-sous").textContent = (m.league || "ligue inconnue") + " · " + heurePar(m.start_time);
@@ -1879,9 +1929,10 @@
     } else if (m.hltv_match_id && m.statut_match !== "a_venir") {
       chargerReplay(m, ficheToken);
     }
+    chargerAnalyseMatch(m, ficheToken);
     $("fiche").classList.remove("cache");
   }
-  function fermerFiche() { ficheDirectId = null; $("fiche").classList.add("cache"); $("fiche").classList.remove("sans-bientot"); }
+  function fermerFiche() { ficheDirectId = null; $("fiche").classList.add("cache"); $("fiche").classList.remove("sans-bientot"); $("fiche-analyse").classList.add("cache"); }
   $("fiche-fermer").addEventListener("click", fermerFiche);
   $("fiche").addEventListener("click", (e) => { if (e.target === $("fiche")) fermerFiche(); });
 

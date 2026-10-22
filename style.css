@@ -245,3 +245,10 @@ details summary{cursor:pointer;font-weight:600}
 /* v2.18 : vue d'ensemble des modules */
 .modules .niveau{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--bord)}
 .modules .niveau.sans-clic{cursor:default}
+
+/* v2.19 : tournois sans tier */
+.tiers .tier-bloc{padding:10px 0;border-top:1px solid var(--bord)}
+.tiers .tier-propose{margin-top:6px;font-size:.9rem;color:var(--accent)}
+.tiers .tier-boutons{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px}
+.tiers .bouton-mini{min-width:56px}
+.tiers .bouton-mini.propose{border-color:var(--accent);color:var(--accent)}

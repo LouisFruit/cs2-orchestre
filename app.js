@@ -202,6 +202,7 @@
     groupe("Reçu de l'analyse", "Les prévisions et résultats de l'analyse, copiés dans l'appli par la collecte.", copiesLignes, true);
 
     dessinerModules(sources, exportsLignes, copiesLignes);
+    chargerTiers();
     const b = $("bandeau-global");
     if (nbRouge > 0) { b.className = "bandeau rouge"; b.textContent = nbRouge + " source(s) ou envoi(s) silencieux"; }
     else if (nbRetard > 0) { b.className = "bandeau alerte"; b.textContent = nbRetard + " source(s) ou envoi(s) en retard"; }
@@ -209,6 +210,83 @@
     await chargerLiaison();
   }
 
+
+  /* ---------- tournois sans tier : choisir S / A / B depuis le téléphone (v2.19) ---------- */
+  function grouperTournois(liste) {
+    // les variantes avec la phase collée au nom (« …Cup 9Semifinal ») sont regroupées sous le nom le plus court
+    const tri = liste.slice().sort((x, y) => x.tournoi.length - y.tournoi.length || x.tournoi.localeCompare(y.tournoi));
+    const groupes = [];
+    tri.forEach((t) => {
+      const g = groupes.find((x) => t.tournoi.startsWith(x.nom));
+      if (g) { g.noms.push(t.tournoi); g.nb += t.nb_matchs; g.lignes.push(t); }
+      else groupes.push({ nom: t.tournoi, noms: [t.tournoi], nb: t.nb_matchs, lignes: [t] });
+    });
+    groupes.forEach((g) => {
+      g.lignes.sort((x, y) => String(x.premier_debut_utc).localeCompare(String(y.premier_debut_utc)));
+      g.premier = g.lignes[0].premier_debut_utc;
+      g.matchs = [].concat.apply([], g.lignes.map((l) => l.matchs || [])).filter((m) => m.equipe1 || m.equipe2).slice(0, 3);
+      const p = g.lignes.find((l) => l.tier_propose);
+      g.propose = p ? p.tier_propose : null;
+      g.raison = p ? p.raison : null;
+    });
+    groupes.sort((x, y) => String(x.premier).localeCompare(String(y.premier)));
+    return groupes;
+  }
+
+  async function chargerTiers() {
+    const zone = $("carte-tiers");
+    if (!zone) return;
+    let r;
+    try { r = await sb.rpc("app_liste_tournois_sans_tier"); } catch (e) { r = { error: e }; }
+    vider(zone);
+    if (r.error || !r.data || r.data.length === 0) return;
+    const carte = el("div", "carte tiers");
+    carte.appendChild(el("strong", null, "Tournois sans tier (" + grouperTournois(r.data).length + ")"));
+    carte.appendChild(el("p", "discret petit", "Ces matchs sont écartés de l'analyse tant que le tournoi n'a pas de tier. Choisis S, A ou B d'après les équipes."));
+    grouperTournois(r.data).forEach((g) => {
+      const bloc = el("div", "tier-bloc");
+      bloc.appendChild(el("div", "nom", g.nom));
+      bloc.appendChild(el("div", "detail discret petit",
+        g.nb + " match(s) à venir · premier : " + (g.premier ? heurePar(g.premier) : "—") + (g.noms.length > 1 ? " · " + (g.noms.length - 1) + " variante(s) de nom" : "")));
+      g.matchs.forEach((m) => {
+        const rg = (x) => (x === null || x === undefined ? "rang ?" : "#" + x);
+        bloc.appendChild(el("div", "detail petit", (m.equipe1 || "?") + " (" + rg(m.rang1) + ") – " + (m.equipe2 || "?") + " (" + rg(m.rang2) + ")"));
+      });
+      if (g.propose) bloc.appendChild(el("div", "tier-propose", "Claude propose : " + g.propose.toUpperCase() + (g.raison ? " (" + g.raison + ")" : "")));
+      const zoneBtn = el("div", "tier-boutons");
+      const montrerChoix = () => {
+        vider(zoneBtn);
+        ["s", "a", "b"].forEach((t) => {
+          const b = el("button", "bouton-mini" + (g.propose === t ? " propose" : ""), t.toUpperCase());
+          b.type = "button";
+          b.addEventListener("click", () => confirmer(t));
+          zoneBtn.appendChild(b);
+        });
+      };
+      const confirmer = (t) => {
+        vider(zoneBtn);
+        zoneBtn.appendChild(el("span", "petit", "Mettre « " + g.nom + " » en tier " + t.toUpperCase() + " ?"));
+        const oui = el("button", "bouton-mini", "Oui");
+        oui.type = "button";
+        const non = el("button", "bouton-mini", "Annuler");
+        non.type = "button";
+        non.addEventListener("click", montrerChoix);
+        oui.addEventListener("click", async () => {
+          oui.disabled = true; non.disabled = true;
+          const w = await sb.rpc("app_choisir_tier", { p_evenements: g.noms, p_tier: t });
+          if (w.error) { vider(zoneBtn); zoneBtn.appendChild(el("span", "petit", "Échec : " + w.error.message)); const re = el("button", "bouton-mini", "Réessayer"); re.type = "button"; re.addEventListener("click", montrerChoix); zoneBtn.appendChild(re); return; }
+          vider(zoneBtn);
+          zoneBtn.appendChild(el("span", "petit", "✓ Tier " + t.toUpperCase() + " enregistré. Pris en compte au prochain export (moins d'une heure)."));
+        });
+        zoneBtn.appendChild(oui);
+        zoneBtn.appendChild(non);
+      };
+      montrerChoix();
+      bloc.appendChild(zoneBtn);
+      carte.appendChild(bloc);
+    });
+    zone.appendChild(carte);
+  }
 
   /* ---------- vue d'ensemble des modules (v2.18) ---------- */
   function pireStatut(lignes) {

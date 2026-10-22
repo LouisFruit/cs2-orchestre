@@ -917,6 +917,7 @@
 
   let filtreMatchs = "jour";
   try { const f = localStorage.getItem("filtre_matchs"); if (f === "jour" || f === "tournoi" || f === "tier") filtreMatchs = f; } catch (e) { /* facultatif */ }
+  let peuVues = {}; // hltv_match_id -> équipe(s) peu vue(s), d'après l'analyse
   let replayCartes = []; // résultats par carte des matchs de la fenêtre (vue app_replay_cartes)
 
   async function chargerMatchs() {
@@ -935,6 +936,15 @@
         if (!rc.error) replayCartes = rc.data || [];
       }
     } catch (e) { replayCartes = []; }
+    // Équipes peu vues signalées par l'analyse : facultatif (vue absente = aucune pastille)
+    peuVues = {};
+    try {
+      const ids2 = matchsCache.map((m) => m.hltv_match_id).filter(Boolean).map(String);
+      if (ids2.length) {
+        const pv = await sb.from("app_analyse_previsions").select("hltv_match_id,drapeau_peu_vue,equipe_peu_vue").in("hltv_match_id", ids2).eq("drapeau_peu_vue", true);
+        if (!pv.error) (pv.data || []).forEach((x) => { peuVues[String(x.hltv_match_id)] = x.equipe_peu_vue || ""; });
+      }
+    } catch (e) { peuVues = {}; }
     dessinerMatchs();
   }
 
@@ -1055,6 +1065,10 @@
     if (bo) meta.push("BO" + bo);
     if (m.tier) meta.push("Tier " + String(m.tier).toUpperCase());
     bouton.appendChild(el("div", "meta-match", meta.join(" · ")));
+    if (m.hltv_match_id && Object.prototype.hasOwnProperty.call(peuVues, String(m.hltv_match_id))) {
+      const eqv = peuVues[String(m.hltv_match_id)];
+      bouton.appendChild(el("span", "puce peu", "Équipe peu vue" + (eqv ? " : " + eqv : "")));
+    }
     // Une ligne par carte jouée
     if (fini && m.hltv_match_id) {
       const cs = replayCartes.filter((c) => c.hltv_match_id === m.hltv_match_id);

@@ -1624,6 +1624,12 @@
       if (a.resolu_le) b.appendChild(el("span", "badge ok", "résolue à " + heureSeule(a.resolu_le)));
       if (a.repetitions > 0) b.appendChild(el("span", "badge", "répétée " + a.repetitions + " fois"));
       carte.appendChild(b);
+      if (/tournois_sans_tier/.test((a.cle || "") + " " + (a.source || "")) || /sans tier/i.test(a.titre || "")) {
+        const lien = el("span", "lien-tiers", "Choisir les tiers ›");
+        lien.setAttribute("role", "button");
+        lien.addEventListener("click", (ev) => { ev.stopPropagation(); aller("collecte"); });
+        carte.appendChild(lien);
+      }
       carte.addEventListener("click", async () => {
         if (a.lu_le) return;
         const r = await sb.from("app_notifications").update({ lu_le: new Date().toISOString() }).eq("id", a.id);

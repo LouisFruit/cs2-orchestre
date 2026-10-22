@@ -201,11 +201,49 @@
     groupe("Envois vers l'analyse", "Les fichiers que la collecte prépare sur ton PC pour l'analyse.", exportsLignes, false);
     groupe("Reçu de l'analyse", "Les prévisions et résultats de l'analyse, copiés dans l'appli par la collecte.", copiesLignes, true);
 
+    dessinerModules(sources, exportsLignes, copiesLignes);
     const b = $("bandeau-global");
     if (nbRouge > 0) { b.className = "bandeau rouge"; b.textContent = nbRouge + " source(s) ou envoi(s) silencieux"; }
     else if (nbRetard > 0) { b.className = "bandeau alerte"; b.textContent = nbRetard + " source(s) ou envoi(s) en retard"; }
     else { b.className = "bandeau ok"; b.textContent = "Toutes les sources et tous les envois sont à jour"; }
     await chargerLiaison();
+  }
+
+
+  /* ---------- vue d'ensemble des modules (v2.18) ---------- */
+  function pireStatut(lignes) {
+    if (lignes.some((s) => s.statut === "silencieux")) return "silencieux";
+    if (lignes.some((s) => s.statut === "en_retard")) return "en_retard";
+    return lignes.length ? "ok" : "en_veille";
+  }
+  function dessinerModules(sources, exportsL, copiesL) {
+    const zone = $("carte-modules");
+    vider(zone);
+    const carte = el("div", "carte modules");
+    carte.appendChild(el("strong", null, "Les modules"));
+    carte.appendChild(el("p", "discret petit", "Où en est chaque partie du projet, en un coup d'œil."));
+    const ligne = (nom, statut, libelle, detail) => {
+      const l = el("div", "niveau sans-clic");
+      l.appendChild(el("span", "voyant " + statut));
+      const corps = el("div", "corps");
+      corps.appendChild(el("div", "nom", nom));
+      corps.appendChild(el("div", "detail discret petit", detail));
+      l.appendChild(corps);
+      l.appendChild(el("span", "statut " + statut, libelle));
+      carte.appendChild(l);
+    };
+    const tout = sources.concat(exportsL);
+    const sc = pireStatut(tout);
+    const nbOk = tout.filter((s) => s.statut === "ok").length;
+    ligne("Collecte", sc, LIBELLES_STATUT[sc] || sc, nbOk + " source(s) ou envoi(s) à jour sur " + tout.length + ".");
+    if (copiesL.length) {
+      const s = copiesL[0], sa = pireStatut(copiesL);
+      ligne("Analyse", sa, LIBELLES_STATUT[sa] || sa, "Dernière copie reçue : " + (s.derniere ? heurePar(s.derniere) + " (il y a " + dureeLisible(s.retard_min) + ")" : "aucune") + ".");
+    } else {
+      ligne("Analyse", "en_veille", "En attente", "Aucune prévision encore copiée dans l'appli (premier import à venir).");
+    }
+    ligne("Robot", "en_veille", "Pas démarré", "Prévu début novembre, en paris fictifs seulement.");
+    zone.appendChild(carte);
   }
 
   /* ---------- liaison des matchs entre les trois sources ---------- */

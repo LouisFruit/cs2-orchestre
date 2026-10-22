@@ -241,3 +241,7 @@ details summary{cursor:pointer;font-weight:600}
 .courbe{width:100%;height:110px;color:var(--accent);margin:6px 0}
 .puce.fantome-puce{color:var(--discret);border-style:dashed}
 .leg-rounds{font-size:.85rem}
+
+/* v2.18 : vue d'ensemble des modules */
+.modules .niveau{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--bord)}
+.modules .niveau.sans-clic{cursor:default}

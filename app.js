@@ -128,11 +128,39 @@
   function nomSource(n) { return NOMS_SOURCES[n] || n; }
   const LIBELLES_STATUT = { ok: "OK", en_retard: "En retard", silencieux: "Silencieux", en_veille: "En veille" };
 
+
+  /* ---------- sections de la page Collecte : titre en évidence, pastille d'état, repli (v2.20) ---------- */
+  const sectionsFermees = {};
+  function section(cle, titre, statut, nb) {
+    const racine = el("section", "section-bloc");
+    const tete = el("button", "section-tete " + statut);
+    tete.type = "button";
+    tete.appendChild(el("span", "section-titre", titre));
+    if (nb !== undefined && nb !== null) tete.appendChild(el("span", "section-nb", String(nb)));
+    tete.appendChild(el("span", "voyant " + statut));
+    const peutPlier = statut === "ok" || statut === "en_veille";
+    const chevron = el("span", "section-chevron", "");
+    tete.appendChild(chevron);
+    const corps = el("div", "section-corps");
+    const maj = () => {
+      const ferme = peutPlier && sectionsFermees[cle];
+      corps.classList.toggle("cache", !!ferme);
+      chevron.textContent = peutPlier ? (ferme ? "▸" : "▾") : "";
+    };
+    tete.addEventListener("click", () => { if (!peutPlier) return; sectionsFermees[cle] = !sectionsFermees[cle]; maj(); });
+    maj();
+    racine.appendChild(tete);
+    racine.appendChild(corps);
+    return { racine: racine, corps: corps };
+  }
+
   async function chargerCollecte() {
     const { data, error } = await sb.from("app_etat_collecte").select("*");
     if (error) throw error;
     const liste = $("liste-collecte");
     vider(liste);
+    const listeEx = $("liste-exports");
+    vider(listeEx);
 
     if (!data || data.length === 0) {
       $("bandeau-global").className = "bandeau rouge";
@@ -153,6 +181,8 @@
       if (s.statut === "silencieux") nbRouge++;
       if (s.statut === "en_retard") nbRetard++;
     });
+    const secSources = section("sources", "Sources de données", pireStatut(sources));
+    liste.appendChild(secSources.racine);
     sources.forEach((s) => {
       const ligne = el("div", "source cliquable");
       ligne.setAttribute("role", "button");
@@ -169,14 +199,16 @@
       ligne.appendChild(bloc);
       ligne.appendChild(el("span", "statut " + s.statut, LIBELLES_STATUT[s.statut] || s.statut));
       ligne.appendChild(el("span", "fleche", "›"));
-      liste.appendChild(ligne);
+      secSources.corps.appendChild(ligne);
     });
+    secSources.corps.appendChild(el("p", "discret petit", "Touche une source pour voir tout ce qu'elle collecte."));
 
     // Envois vers l'analyse (exports écrits sur le PC) et copies reçues de l'analyse : deux groupes à part
     const groupe = (titre, intro, lignes, copie) => {
       if (!lignes.length) return;
-      const carteEx = el("div", "carte exports");
-      carteEx.appendChild(el("strong", null, titre));
+      const secEx = section(copie ? "recu" : "envois", titre, pireStatut(lignes));
+      const carteEx = secEx.corps;
+      carteEx.classList.add("exports");
       carteEx.appendChild(el("p", "discret petit", intro));
       lignes.forEach((s) => {
         const l = el("div", "niveau");
@@ -196,7 +228,7 @@
         l.appendChild(el("span", "fleche", "›"));
         carteEx.appendChild(l);
       });
-      liste.appendChild(carteEx);
+      listeEx.appendChild(secEx.racine);
     };
     groupe("Envois vers l'analyse", "Les fichiers que la collecte prépare sur ton PC pour l'analyse.", exportsLignes, false);
     groupe("Reçu de l'analyse", "Les prévisions et résultats de l'analyse, copiés dans l'appli par la collecte.", copiesLignes, true);
@@ -240,8 +272,9 @@
     try { r = await sb.rpc("app_liste_tournois_sans_tier"); } catch (e) { r = { error: e }; }
     vider(zone);
     if (r.error || !r.data || r.data.length === 0) return;
-    const carte = el("div", "carte tiers");
-    carte.appendChild(el("strong", null, "Tournois sans tier (" + grouperTournois(r.data).length + ")"));
+    const secT = section("tiers", "À faire : tournois sans tier", "en_retard", grouperTournois(r.data).length);
+    const carte = secT.corps;
+    carte.classList.add("tiers");
     carte.appendChild(el("p", "discret petit", "Ces matchs sont écartés de l'analyse tant que le tournoi n'a pas de tier. Choisis S, A ou B d'après les équipes."));
     grouperTournois(r.data).forEach((g) => {
       const bloc = el("div", "tier-bloc");
@@ -285,7 +318,7 @@
       bloc.appendChild(zoneBtn);
       carte.appendChild(bloc);
     });
-    zone.appendChild(carte);
+    zone.appendChild(secT.racine);
   }
 
   /* ---------- vue d'ensemble des modules (v2.18) ---------- */
@@ -297,8 +330,12 @@
   function dessinerModules(sources, exportsL, copiesL) {
     const zone = $("carte-modules");
     vider(zone);
-    const carte = el("div", "carte modules");
-    carte.appendChild(el("strong", null, "Les modules"));
+    const tout = sources.concat(exportsL);
+    const sc = pireStatut(tout);
+    const sa = copiesL.length ? pireStatut(copiesL) : "en_veille";
+    const secM = section("modules", "Les modules", pireStatut([{ statut: sc }, { statut: sa }]));
+    const carte = secM.corps;
+    carte.classList.add("modules");
     carte.appendChild(el("p", "discret petit", "Où en est chaque partie du projet, en un coup d'œil."));
     const ligne = (nom, statut, libelle, detail) => {
       const l = el("div", "niveau sans-clic");
@@ -310,18 +347,16 @@
       l.appendChild(el("span", "statut " + statut, libelle));
       carte.appendChild(l);
     };
-    const tout = sources.concat(exportsL);
-    const sc = pireStatut(tout);
     const nbOk = tout.filter((s) => s.statut === "ok").length;
     ligne("Collecte", sc, LIBELLES_STATUT[sc] || sc, nbOk + " source(s) ou envoi(s) à jour sur " + tout.length + ".");
     if (copiesL.length) {
-      const s = copiesL[0], sa = pireStatut(copiesL);
+      const s = copiesL[0];
       ligne("Analyse", sa, LIBELLES_STATUT[sa] || sa, "Dernière copie reçue : " + (s.derniere ? heurePar(s.derniere) + " (il y a " + dureeLisible(s.retard_min) + ")" : "aucune") + ".");
     } else {
       ligne("Analyse", "en_veille", "En attente", "Aucune prévision encore copiée dans l'appli (premier import à venir).");
     }
     ligne("Robot", "en_veille", "Pas démarré", "Prévu début novembre, en paris fictifs seulement.");
-    zone.appendChild(carte);
+    zone.appendChild(secM.racine);
   }
 
   /* ---------- liaison des matchs entre les trois sources ---------- */
@@ -339,13 +374,10 @@
       if (e.error) throw e.error;
       vider(zone);
       const etat = (e.data || [])[0] || null;
-      const carte = el("div", "carte liaison");
-      const tete = el("div", "entete-liaison");
       const panne = etat && etat.statut === "panne";
-      tete.appendChild(el("span", "voyant " + (panne ? "silencieux" : "ok")));
-      tete.appendChild(el("strong", null, "Liaison des matchs"));
-      tete.appendChild(el("span", "statut " + (panne ? "silencieux" : "ok"), panne ? "En panne" : "OK"));
-      carte.appendChild(tete);
+      const secL = section("liaison", "Liaison des matchs", panne ? "silencieux" : "ok");
+      const carte = secL.corps;
+      carte.classList.add("liaison");
       carte.appendChild(el("p", "discret petit",
         "Un même match retrouvé dans BO3GG, ODDSPAPI et HLTV. Dernière mise à jour des liaisons : " +
         (etat && etat.derniere_maj ? heurePar(etat.derniere_maj) + " (il y a " + dureeLisible(etat.retard_min) + ")" : "jamais") + "."));
@@ -399,7 +431,7 @@
         carte.appendChild(ligne);
       }
       carte.appendChild(el("p", "discret petit", "Matchs des 30 derniers jours, commencés il y a plus de 6 h. Touche un niveau pour voir les matchs non reliés."));
-      zone.appendChild(carte);
+      zone.appendChild(secL.racine);
     } catch (err) {
       vider(zone);
       zone.appendChild(el("p", "discret petit", "Liaison des matchs : lecture impossible (" + (err.message || err) + ")."));

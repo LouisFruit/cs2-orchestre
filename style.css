@@ -253,3 +253,13 @@ details summary{cursor:pointer;font-weight:600}
 .tiers .bouton-mini{min-width:56px}
 .tiers .bouton-mini.propose{border-color:var(--accent);color:var(--accent)}
 .alerte .lien-tiers{display:inline-block;margin-top:8px;color:var(--accent);font-weight:600}
+
+/* v2.20 : sections de la page Collecte */
+.section-bloc{margin:22px 0 8px}
+.section-tete{display:flex;align-items:center;gap:10px;width:100%;background:none;border:0;border-left:5px solid var(--accent);padding:6px 4px 6px 12px;color:var(--texte);font-size:1.15rem;font-weight:700;text-align:left;cursor:pointer}
+.section-tete.en_retard{border-left-color:var(--retard)} .section-tete.silencieux{border-left-color:var(--rouge)}
+.section-titre{flex:1}
+.section-nb{background:var(--bord);border-radius:10px;padding:0 9px;font-size:.85rem;font-weight:600}
+.section-chevron{width:14px;color:var(--discret);font-size:.9rem}
+.section-corps{margin-top:6px}
+.section-corps.exports .niveau:first-of-type{border-top:0}

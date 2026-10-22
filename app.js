@@ -595,6 +595,7 @@
   /* ---------- écran Analyse (v2.8) : test à blanc ---------- */
   // L'appli n'affiche que ce que l'analyse exporte : aucune statistique n'est calculée ici.
   let anaPrev = [], anaSyn = null, anaFiltre = "carte", anaLarge = true;
+  const LIB_FORCE = { equilibre: "équilibré", leger_favori: "léger favori", favori_net: "favori net" };
   const TIERS = { s: "Tier S", a: "Tier A", b: "Tier B", sa_estime: "S/A (estimé)" };
 
   function fmtNb(x, d) { return x === null || x === undefined || x === "" ? "—" : Number(x).toLocaleString("fr-FR", { maximumFractionDigits: d === undefined ? 1 : d }); }
@@ -845,7 +846,7 @@
     const un = Number(p.p_equipe1) >= 0.5;
     const eq = (n) => p["equipe" + n + "_nom"] || "?";
     let force = "Notes de force : " + eq(1) + " " + fmtNb(p.note1, 0) + " contre " + eq(2) + " " + fmtNb(p.note2, 0);
-    if (aVal(p.force_tranche)) force += " (" + String(p.force_tranche).replace(/_/g, " ") + ")";
+    if (aVal(p.force_tranche)) force += " (" + (LIB_FORCE[p.force_tranche] || String(p.force_tranche).replace(/_/g, " ")) + ")";
     bloc("Force", [force + "."]);
     bloc("Solidité", [
       eq(1) + " : " + fmtNb(p.nb_cartes_1, 0) + " cartes vues, dernière le " + (aVal(p.derniere_carte_1) ? new Date(p.derniere_carte_1).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" }) : "—"),

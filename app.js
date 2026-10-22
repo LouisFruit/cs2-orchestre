@@ -729,7 +729,8 @@
       ["Taux attendu (moyenne des probabilités annoncées)", fmtPct(s.attendu)],
       ["Brier", aVal(s.brier) && nC !== null && nC >= 30 ? fmtNb(s.brier, 3) + (aVal(s.brier_ic_bas) ? " (entre " + fmtNb(s.brier_ic_bas, 3) + " et " + fmtNb(s.brier_ic_haut, 3) + ")" : "") + " · référence « toujours 50 % » : " + fmtNb(s.brier_ref || 0.25, 3) : "— (dès 30 cartes)"],
       ["Perte logarithmique", aVal(s.log_loss) && nC !== null && nC >= 30 ? fmtNb(s.log_loss, 3) + " · référence : " + fmtNb(s.log_loss_ref || 0.693, 3) : "— (dès 30 cartes)"],
-      ["Version des réglages", aVal(s.version_reglages) ? s.version_reglages : "—"]
+      ["Version des réglages", aVal(s.version_reglages) ? s.version_reglages : "—"],
+      ["Version des tranches", aVal(s.version_tranches) ? s.version_tranches : "—"]
     ];
     lignes.forEach(([k, v]) => {
       const l = el("div", "ligne-kv");

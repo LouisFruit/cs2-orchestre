@@ -142,8 +142,10 @@
 
     const ordre = ["HLTV (direct)", "bo3.gg", "OddsPapi"];
     const estExport = (s) => /^Export /.test(s.source);
+    const estCopie = (s) => /^Prévisions de l'analyse/.test(s.source);
     const exportsLignes = data.filter(estExport);
-    const sources = data.filter((s) => !estExport(s));
+    const copiesLignes = data.filter(estCopie);
+    const sources = data.filter((s) => !estExport(s) && !estCopie(s));
     sources.sort((a, b) => ordre.indexOf(a.source) - ordre.indexOf(b.source));
 
     let nbRouge = 0, nbRetard = 0;
@@ -170,21 +172,22 @@
       liste.appendChild(ligne);
     });
 
-    // Envois vers l'analyse (exports écrits sur le PC) : groupe à part
-    if (exportsLignes.length) {
+    // Envois vers l'analyse (exports écrits sur le PC) et copies reçues de l'analyse : deux groupes à part
+    const groupe = (titre, intro, lignes, copie) => {
+      if (!lignes.length) return;
       const carteEx = el("div", "carte exports");
-      carteEx.appendChild(el("strong", null, "Envois vers l'analyse"));
-      carteEx.appendChild(el("p", "discret petit", "Les fichiers que la collecte prépare sur ton PC pour l'analyse."));
-      exportsLignes.forEach((s) => {
+      carteEx.appendChild(el("strong", null, titre));
+      carteEx.appendChild(el("p", "discret petit", intro));
+      lignes.forEach((s) => {
         const l = el("div", "niveau");
         l.setAttribute("role", "button");
         l.tabIndex = 0;
-        l.addEventListener("click", () => ouvrirExport(s));
+        l.addEventListener("click", () => ouvrirExport(s, copie));
         l.appendChild(el("span", "voyant " + s.statut));
         const corps = el("div", "corps");
-        corps.appendChild(el("div", "nom", nomExport(s.source)));
+        corps.appendChild(el("div", "nom", copie ? s.source : nomExport(s.source)));
         corps.appendChild(el("div", "detail discret petit",
-          "Dernier envoi réussi : " + (s.derniere ? heurePar(s.derniere) + " (il y a " + dureeLisible(s.retard_min) + ")" : "aucun")));
+          (copie ? "Dernière copie réussie : " : "Dernier envoi réussi : ") + (s.derniere ? heurePar(s.derniere) + " (il y a " + dureeLisible(s.retard_min) + ")" : "aucune")));
         if (s.echec) corps.appendChild(el("div", "detail petit", "Le dernier passage a échoué."));
         if (s.seuil_min !== null && s.seuil_min !== undefined)
           corps.appendChild(el("div", "detail discret petit", "Seuil : " + dureeLisible(s.seuil_min) + (s.seuil_nuit_min ? " (" + dureeLisible(s.seuil_nuit_min) + " la nuit)" : "")));
@@ -194,7 +197,9 @@
         carteEx.appendChild(l);
       });
       liste.appendChild(carteEx);
-    }
+    };
+    groupe("Envois vers l'analyse", "Les fichiers que la collecte prépare sur ton PC pour l'analyse.", exportsLignes, false);
+    groupe("Reçu de l'analyse", "Les prévisions et résultats de l'analyse, copiés dans l'appli par la collecte.", copiesLignes, true);
 
     const b = $("bandeau-global");
     if (nbRouge > 0) { b.className = "bandeau rouge"; b.textContent = nbRouge + " source(s) ou envoi(s) silencieux"; }
@@ -345,21 +350,21 @@
   }
 
   /* ---------- détail d'un envoi vers l'analyse ---------- */
-  function ouvrirExport(s) {
+  function ouvrirExport(s, copie) {
     ficheDirectId = null;
-    $("fiche-titre").textContent = nomExport(s.source);
-    $("fiche-sous").textContent = "Envoi vers l'analyse : fichier préparé sur ton PC";
+    $("fiche-titre").textContent = copie ? s.source : nomExport(s.source);
+    $("fiche-sous").textContent = copie ? "Copie reçue de l'analyse dans l'appli (ajout seulement)" : "Envoi vers l'analyse : fichier préparé sur ton PC";
     vider($("fiche-badges"));
     const zone = $("fiche-detail");
     vider(zone);
     const c = el("div", "carte");
     c.appendChild(el("span", "statut " + s.statut, LIBELLES_STATUT[s.statut] || s.statut));
-    c.appendChild(el("p", "petit", "Dernier envoi réussi : " + (s.derniere ? heurePar(s.derniere) + " (il y a " + dureeLisible(s.retard_min) + ")" : "aucun")));
+    c.appendChild(el("p", "petit", (copie ? "Dernière copie réussie : " : "Dernier envoi réussi : ") + (s.derniere ? heurePar(s.derniere) + " (il y a " + dureeLisible(s.retard_min) + ")" : "aucune")));
     if (s.derniere_tentative) c.appendChild(el("p", "petit", "Dernière tentative : " + heurePar(s.derniere_tentative) + (s.echec ? " (échec)" : " (réussie)")));
-    if (s.lignes !== null && s.lignes !== undefined) c.appendChild(el("p", "petit", "Lignes exportées : " + nombre(s.lignes)));
+    if (s.lignes !== null && s.lignes !== undefined) c.appendChild(el("p", "petit", (copie ? "Lignes copiées : " : "Lignes exportées : ") + nombre(s.lignes)));
     if (s.message) c.appendChild(el("p", "discret petit", s.message));
     if (s.seuil_min !== null && s.seuil_min !== undefined)
-      c.appendChild(el("p", "discret petit", "Seuil : " + dureeLisible(s.seuil_min) + (s.seuil_nuit_min ? " (" + dureeLisible(s.seuil_nuit_min) + " la nuit)" : "") + ". Un échec du dernier passage met l'envoi « en retard » tout de suite."));
+      c.appendChild(el("p", "discret petit", "Seuil : " + dureeLisible(s.seuil_min) + (s.seuil_nuit_min ? " (" + dureeLisible(s.seuil_nuit_min) + " la nuit)" : "") + (copie ? ". Un échec du dernier passage met la copie « en retard » tout de suite." : ". Un échec du dernier passage met l'envoi « en retard » tout de suite.")));
     zone.appendChild(c);
     $("fiche").classList.remove("cache");
   }

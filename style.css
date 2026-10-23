@@ -273,3 +273,10 @@ details summary{cursor:pointer;font-weight:600}
 .match.tier-s{border-left:4px solid #c792ea}
 .match.tier-a{border-left:4px solid var(--accent)}
 .match.tier-b{border-left:4px solid var(--veille)}
+
+/* v2.25 : carte « bons pronostics par marché » */
+.marches .marche-ligne{padding:10px 0;border-bottom:1px solid var(--bord)}
+.marches .marche-tete{display:flex;flex-wrap:wrap;align-items:center;gap:8px;justify-content:space-between}
+.marches .marche-nom{font-weight:600}
+.marches .marche-alerte{font-size:.75rem;padding:2px 8px;border-radius:10px;background:rgba(240,160,40,.18);color:#e8a030}
+.marches .marche-grand{font-size:1.5rem;font-weight:700;margin:4px 0}

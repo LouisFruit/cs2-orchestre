@@ -871,10 +871,54 @@
     dessinerAnalyse();
   }
 
+  // Carte « bons pronostics par marché » : une ligne par marché, alimentée par la synthèse de l'analyse
+  function carteMarches(s) {
+    const SEUIL = 30;
+    let marches = listeJson(s.marches);
+    if (!marches.length && aVal(s.n_cartes_principal)) {
+      const n = Number(s.n_cartes_principal);
+      marches = [{
+        marche: "vainqueur_carte", libelle: "Vainqueur de carte", n_evalues: n,
+        n_justes: aVal(s.reussite) ? Math.round(Number(s.reussite) * n) : null,
+        reussite: s.reussite, ic_bas: s.reussite_ic_bas, ic_haut: s.reussite_ic_haut,
+        attendu: s.attendu, brier: s.brier, brier_ref: s.brier_ref || 0.25
+      }];
+    }
+    if (!marches.some((m) => m.marche === "vainqueur_match")) {
+      marches.push({ marche: "vainqueur_match", libelle: "Vainqueur du match", attente: true });
+    }
+    const c = el("div", "carte marches");
+    c.appendChild(el("strong", null, "Bons pronostics par marché"));
+    marches.forEach((m) => {
+      const bloc = el("div", "marche-ligne");
+      const tete = el("div", "marche-tete");
+      tete.appendChild(el("span", "marche-nom", m.libelle || m.marche));
+      bloc.appendChild(tete);
+      if (m.attente) {
+        bloc.appendChild(el("p", "discret petit", "En attente des chiffres de l'analyse (pas encore dans sa synthèse)."));
+        c.appendChild(bloc);
+        return;
+      }
+      const n = aVal(m.n_evalues) ? Number(m.n_evalues) : 0;
+      if (n < SEUIL) tete.appendChild(el("span", "marche-alerte", "Échantillon trop petit pour conclure"));
+      const justes = aVal(m.n_justes) ? m.n_justes + " justes sur " + n : n + " évaluées";
+      let r = fmtPct(m.reussite);
+      if (aVal(m.ic_bas) && aVal(m.ic_haut)) r += " [" + fmtNb(Number(m.ic_bas) * 100, 0) + " – " + fmtNb(Number(m.ic_haut) * 100, 0) + " %]";
+      bloc.appendChild(el("div", "marche-grand", r));
+      bloc.appendChild(el("div", "discret petit", justes + " · attendu par le modèle : " + fmtPct(m.attendu)));
+      bloc.appendChild(el("div", "discret petit", "Brier " + fmtNb(m.brier, 3) + " · hasard " + fmtNb(m.brier_ref || 0.25, 2) + " (plus bas = mieux)"));
+      c.appendChild(bloc);
+    });
+    c.appendChild(el("p", "discret petit", "Moins de " + SEUIL + " prévisions évaluées par marché : aucune conclusion. Ces chiffres ne servent pas de règle de pari avant les règles v1 du 24/11."));
+    return c;
+  }
+
   function dessinerAnalyse() {
     const zone = $("analyse-contenu");
     vider(zone);
     const s = anaSyn || {};
+
+    zone.appendChild(carteMarches(s));
 
     // Filtres
     const fl = el("div", "filtres");

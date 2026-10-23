@@ -830,6 +830,13 @@
     return morceaux.join(" · ");
   }
 
+  // Identifiant HLTV d'une prévision : la colonne si elle existe, sinon le nombre après « hltv_ » dans id_saisie
+  function idHltvPrevision(p) {
+    if (p.hltv_match_id !== null && p.hltv_match_id !== undefined && String(p.hltv_match_id) !== "") return String(p.hltv_match_id);
+    const r = /^hltv_(\d+)/.exec(String(p.id_saisie || ""));
+    return r ? r[1] : null;
+  }
+
   async function chargerAnalyse() {
     const zone = $("analyse-contenu");
     const [pr, sy] = await Promise.all([
@@ -845,7 +852,20 @@
       return;
     }
     anaPrev = (pr.data || []).slice();
-    anaPrev.forEach((p) => { p.debut_aff = p.debut_retenu_utc || p.debut_saisie_utc || null; });
+    anaPrev.forEach((p) => { p.hltv_id = idHltvPrevision(p); p.debut_aff = p.debut_retenu_utc || p.debut_saisie_utc || null; });
+    // Début manquant : on prend l'heure de début du match dans la liste des matchs
+    const sansDebut = anaPrev.filter((p) => !p.debut_aff && p.hltv_id);
+    if (sansDebut.length) {
+      try {
+        const ids = Array.from(new Set(sansDebut.map((p) => p.hltv_id)));
+        const mm = await sb.from("app_matchs").select("hltv_match_id,start_time").in("hltv_match_id", ids);
+        if (!mm.error) {
+          const heures = {};
+          (mm.data || []).forEach((x) => { heures[String(x.hltv_match_id)] = x.start_time; });
+          sansDebut.forEach((p) => { if (heures[p.hltv_id]) p.debut_aff = heures[p.hltv_id]; });
+        }
+      } catch (e) { /* facultatif */ }
+    }
     anaPrev.sort((a, b) => (b.debut_aff || "").localeCompare(a.debut_aff || ""));
     anaSyn = !sy.error && sy.data && sy.data.length ? sy.data[0] : null;
     dessinerAnalyse();
@@ -1101,8 +1121,9 @@
     try {
       const ids2 = matchsCache.map((m) => m.hltv_match_id).filter(Boolean).map(String);
       if (ids2.length) {
-        const pv = await sb.from("app_analyse_previsions").select("hltv_match_id,drapeau_peu_vue,equipe_peu_vue").in("hltv_match_id", ids2).eq("drapeau_peu_vue", true);
-        if (!pv.error) (pv.data || []).forEach((x) => { peuVues[String(x.hltv_match_id)] = x.equipe_peu_vue || ""; });
+        const pv = await sb.from("app_analyse_previsions").select("hltv_match_id,id_saisie,drapeau_peu_vue,equipe_peu_vue")
+          .or("hltv_match_id.in.(" + ids2.join(",") + "),id_saisie.in.(" + ids2.map((i) => "hltv_" + i).join(",") + ")").eq("drapeau_peu_vue", true);
+        if (!pv.error) (pv.data || []).forEach((x) => { const k = idHltvPrevision(x); if (k) peuVues[k] = x.equipe_peu_vue || ""; });
       }
     } catch (e) { peuVues = {}; }
     dessinerMatchs();
@@ -2059,7 +2080,8 @@
     carte.classList.add("cache");
     if (!m.hltv_match_id) return;
     try {
-      const r = await sb.from("app_analyse_previsions").select("*").eq("hltv_match_id", String(m.hltv_match_id));
+      const idm = String(m.hltv_match_id);
+      const r = await sb.from("app_analyse_previsions").select("*").or("hltv_match_id.eq." + idm + ",id_saisie.eq.hltv_" + idm);
       if (token !== ficheToken) return;
       if (r.error) return; // vue absente : la carte reste cachée
       carte.classList.remove("cache");

@@ -280,3 +280,5 @@ details summary{cursor:pointer;font-weight:600}
 .marches .marche-nom{font-weight:600}
 .marches .marche-alerte{font-size:.75rem;padding:2px 8px;border-radius:10px;background:rgba(240,160,40,.18);color:#e8a030}
 .marches .marche-grand{font-size:1.5rem;font-weight:700;margin:4px 0}
+.marches .marche-ligne.grise{opacity:.55}
+.marches .marche-later{font-size:.75rem;color:var(--discret,#8a93a3)}

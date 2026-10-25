@@ -237,6 +237,7 @@
 
     dessinerModules(sources, exportsLignes, copiesLignes);
     chargerTiers();
+    chargerStockage();
     const b = $("bandeau-global");
     if (nbRouge > 0) { b.className = "bandeau rouge"; b.textContent = nbRouge + " source(s) ou envoi(s) silencieux"; }
     else if (nbRetard > 0) { b.className = "bandeau alerte"; b.textContent = nbRetard + " source(s) ou envoi(s) en retard"; }
@@ -244,6 +245,46 @@
     await chargerLiaison();
   }
 
+
+  /* ---------- jauge de remplissage de la base (v2.27) ---------- */
+  function octetsLisibles(o) {
+    if (o >= 1e9) return (o / 1e9).toFixed(2).replace(".", ",") + " Go";
+    return Math.round(o / 1048576) + " Mo";
+  }
+  async function chargerStockage() {
+    const zone = $("carte-stockage");
+    if (!zone) return;
+    let r;
+    try { r = await sb.rpc("app_taille_base"); } catch (e) { r = { error: e }; }
+    vider(zone);
+    if (r.error || !r.data || !r.data.octets) return;
+    const d = r.data;
+    const part = d.octets / d.limite_octets;
+    const pct = Math.round(part * 100);
+    const statut = part >= 0.85 ? "silencieux" : (part >= 0.7 ? "en_retard" : "ok");
+    const sec = section("stockage", "Remplissage de la base", statut, pct + " %", { ferme: true });
+    const c = sec.corps;
+    c.classList.add("stockage");
+    const piste = el("div", "stockage-piste");
+    piste.setAttribute("role", "img");
+    piste.setAttribute("aria-label", pct + " % de la base utilisée");
+    const rempli = el("div", "stockage-rempli " + statut);
+    rempli.style.width = Math.min(100, pct) + "%";
+    piste.appendChild(rempli);
+    c.appendChild(piste);
+    c.appendChild(el("div", "detail", octetsLisibles(d.octets) + " utilisés sur " + octetsLisibles(d.limite_octets) + " (limite du plan gratuit)"));
+    c.appendChild(el("div", "detail discret petit", "Orange à partir de 70 %, rouge à partir de 85 %. Au-delà de 100 %, les écritures sont refusées et la collecte s'arrête."));
+    if (d.grosses && d.grosses.length) {
+      c.appendChild(el("div", "detail petit stockage-titre", "Les 5 plus grosses tables"));
+      d.grosses.forEach((t) => {
+        const l = el("div", "stockage-ligne");
+        l.appendChild(el("span", "nom", t.table));
+        l.appendChild(el("span", "discret", octetsLisibles(t.octets)));
+        c.appendChild(l);
+      });
+    }
+    zone.appendChild(sec.racine);
+  }
 
   /* ---------- tournois sans tier : choisir S / A / B depuis le téléphone (v2.19) ---------- */
   function grouperTournois(liste) {

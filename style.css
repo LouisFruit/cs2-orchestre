@@ -282,3 +282,11 @@ details summary{cursor:pointer;font-weight:600}
 .marches .marche-grand{font-size:1.5rem;font-weight:700;margin:4px 0}
 .marches .marche-ligne.grise{opacity:.55}
 .marches .marche-later{font-size:.75rem;color:var(--discret,#8a93a3)}
+
+.stockage .stockage-piste{height:12px;background:var(--bord);border-radius:6px;overflow:hidden;margin:6px 0 10px}
+.stockage .stockage-rempli{height:100%;border-radius:6px;background:var(--ok)}
+.stockage .stockage-rempli.en_retard{background:var(--retard)}
+.stockage .stockage-rempli.silencieux{background:var(--rouge)}
+.stockage .stockage-titre{margin-top:10px;font-weight:600}
+.stockage .stockage-ligne{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-top:1px solid var(--bord);font-size:.9rem}
+.stockage .stockage-ligne .nom{min-width:0;overflow-wrap:anywhere}

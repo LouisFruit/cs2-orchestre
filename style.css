@@ -290,3 +290,5 @@ details summary{cursor:pointer;font-weight:600}
 .stockage .stockage-titre{margin-top:10px;font-weight:600}
 .stockage .stockage-ligne{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-top:1px solid var(--bord);font-size:.9rem}
 .stockage .stockage-ligne .nom{min-width:0;overflow-wrap:anywhere}
+.essais summary{cursor:pointer;font-weight:600}
+.essais{margin-top:12px}

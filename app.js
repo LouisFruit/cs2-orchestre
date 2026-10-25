@@ -795,7 +795,7 @@
 
   /* ---------- écran Analyse (v2.8) : test à blanc ---------- */
   // L'appli n'affiche que ce que l'analyse exporte : aucune statistique n'est calculée ici.
-  let anaPrev = [], anaSyn = null, anaFiltre = "carte", anaLarge = true;
+  let anaPrev = [], anaEssais = [], anaSyn = null, anaFiltre = "carte", anaLarge = true;
   const LIB_FORCE = { equilibre: "équilibré", leger_favori: "léger favori", favori_net: "favori net" };
   const TIERS = { s: "Tier S", a: "Tier A", b: "Tier B", sa_estime: "S/A (estimé)" };
 
@@ -874,8 +874,13 @@
   // Identifiant HLTV d'une prévision : la colonne si elle existe, sinon le nombre après « hltv_ » dans id_saisie
   function idHltvPrevision(p) {
     if (p.hltv_match_id !== null && p.hltv_match_id !== undefined && String(p.hltv_match_id) !== "") return String(p.hltv_match_id);
-    const r = /^hltv_(\d+)/.exec(String(p.id_saisie || ""));
+    const r = /^(?:essai_)?hltv_(\d+)/.exec(String(p.id_saisie || ""));
     return r ? r[1] : null;
+  }
+
+  // Prévision d'essai (v2.28) : colonne « mode » = essai, ou identifiant préfixé « essai_ ». Mode vide = officielle.
+  function estEssai(p) {
+    return String(p.mode || "").toLowerCase() === "essai" || /^essai_/.test(String(p.id_saisie || ""));
   }
 
   async function chargerAnalyse() {
@@ -908,7 +913,10 @@
       } catch (e) { /* facultatif */ }
     }
     anaPrev.sort((a, b) => (b.debut_aff || "").localeCompare(a.debut_aff || ""));
-    anaSyn = !sy.error && sy.data && sy.data.length ? sy.data[0] : null;
+    // v2.28 : les essais sont mis à part, ils ne comptent dans aucun résumé ni alerte des prévisions officielles
+    anaEssais = anaPrev.filter(estEssai);
+    anaPrev = anaPrev.filter((p) => !estEssai(p));
+    anaSyn =!sy.error && sy.data && sy.data.length ? sy.data[0] : null;
     dessinerAnalyse();
   }
 
@@ -1051,13 +1059,26 @@
 
     // Cartes de prévision, groupées par jour de Paris
     const liste = anaPrev.filter((p) => p.comptage !== "refusee" && (anaFiltre === "match" ? aVal(p.p_match_equipe1) : p.type_prevision !== "match"));
-    if (!liste.length) { zone.appendChild(el("p", "discret", "Aucune prévision à afficher.")); return; }
+    if (!liste.length) zone.appendChild(el("p", "discret", "Aucune prévision à afficher."));
     let jourCourant = null;
     liste.forEach((p) => {
       const j = p.debut_aff ? jourParis(p.debut_aff) : "?";
       if (j !== jourCourant) { jourCourant = j; zone.appendChild(el("h3", "titre-jour", libJour(p.debut_aff))); }
       zone.appendChild(cartePrevision(p));
     });
+
+    // v2.28 : prévisions d'essai, repliées et séparées (non comptées)
+    const essais = anaEssais.filter((p) => p.comptage !== "refusee" && (anaFiltre === "match" ? aVal(p.p_match_equipe1) : p.type_prevision !== "match"));
+    if (essais.length) {
+      const det = document.createElement("details");
+      det.className = "carte essais";
+      const sm = document.createElement("summary");
+      sm.textContent = "Prévisions d'essai (" + essais.length + ") · non comptées";
+      det.appendChild(sm);
+      det.appendChild(el("p", "discret petit", "Essais de la chaîne automatique en mode essai. Ils ne sont dans aucun chiffre ci-dessus."));
+      essais.forEach((p) => det.appendChild(cartePrevision(p)));
+      zone.appendChild(det);
+    }
   }
 
   function cartePrevision(p) {
@@ -1068,6 +1089,7 @@
       : pointDe(p);
     const tete = el("div", "prev-tete");
     tete.appendChild(el("strong", null, titrePrevision(p)));
+    if (estEssai(p)) tete.appendChild(el("span", "puce peu", "Essai"));
     tete.appendChild(el("span", "puce " + e.cl, e.txt));
     b.appendChild(tete);
     b.appendChild(el("p", "discret petit", sousTitrePrevision(p)));
@@ -1207,7 +1229,7 @@
       const ids2 = matchsCache.map((m) => m.hltv_match_id).filter(Boolean).map(String);
       if (ids2.length) {
         const pv = await sb.from("app_analyse_previsions").select("hltv_match_id,id_saisie,drapeau_peu_vue,equipe_peu_vue")
-          .or("hltv_match_id.in.(" + ids2.join(",") + "),id_saisie.in.(" + ids2.map((i) => "hltv_" + i).join(",") + ")").eq("drapeau_peu_vue", true);
+          .or("hltv_match_id.in.(" + ids2.join(",") + "),id_saisie.in.(" + ids2.map((i) => "hltv_" + i).concat(ids2.map((i) => "essai_hltv_" + i)).join(",") + ")").eq("drapeau_peu_vue", true);
         if (!pv.error) (pv.data || []).forEach((x) => { const k = idHltvPrevision(x); if (k) peuVues[k] = x.equipe_peu_vue || ""; });
       }
     } catch (e) { peuVues = {}; }
@@ -2166,17 +2188,22 @@
     if (!m.hltv_match_id) return;
     try {
       const idm = String(m.hltv_match_id);
-      const r = await sb.from("app_analyse_previsions").select("*").or("hltv_match_id.eq." + idm + ",id_saisie.eq.hltv_" + idm);
+      const r = await sb.from("app_analyse_previsions").select("*").or("hltv_match_id.eq." + idm + ",id_saisie.eq.hltv_" + idm + ",id_saisie.eq.essai_hltv_" + idm);
       if (token !== ficheToken) return;
       if (r.error) return; // vue absente : la carte reste cachée
       carte.classList.remove("cache");
       let rows = r.data || [];
       if (!rows.length) { corps.appendChild(el("p", "discret petit", "Pas de prévision de l'analyse pour ce match.")); return; }
+      // v2.28 : la prévision officielle prime ; sans officielle, on montre l'essai, étiqueté
+      const officielles = rows.filter((x) => !estEssai(x));
+      const surEssai = !officielles.length;
+      if (!surEssai) rows = officielles;
       rows = rows.slice().sort((a, b) => String(b.cree_le || "").localeCompare(String(a.cree_le || "")));
       const idRetenu = rows[0].id_saisie;
       rows = rows.filter((x) => x.id_saisie === idRetenu).sort((a, b) => Number(a.carte_no) - Number(b.carte_no));
       const p = rows[0];
       const f = pointDe(p);
+      if (surEssai) corps.appendChild(el("p", "petit", "Prévision d'essai : elle ne compte pas dans les chiffres de l'analyse."));
       if (aVal(f.p)) {
         corps.appendChild(jauge(f));
         let t = (f.nom || "?") + " favorite : " + fmtPct(f.p);

@@ -988,7 +988,7 @@
     zone.appendChild(el("div", "bandeau fantome", "👻 FANTÔME : prévisions seulement, aucun argent réel."));
 
     // Carte résumé
-    const aVenir = anaPrev.filter((p) => etatPrevision(p).cl === "avenir").length;
+    const aVenir = anaPrev.filter((p) => !(aVal(p.version_contrat) && p.type_prevision === "carte_quelconque") && etatPrevision(p).cl === "avenir").length;
     const r = el("div", "carte");
     r.appendChild(el("strong", null, "Résumé"));
     const lignes = [
@@ -1045,7 +1045,7 @@
     if (Number(s.n_refus_selection) > 0) al.push(s.n_refus_selection + " match(s) non prévus (équipe à déterminer, tier incertain ou statut non admis).");
     anaPrev.filter((p) => p.comptage === "refusee").forEach((p) => al.push("Prévision refusée : " + titrePrevision(p) + (aVal(p.raison_refus) ? " (" + p.raison_refus + ")" : "")));
     const limite = Date.now() - 48 * 3600 * 1000;
-    anaPrev.filter((p) => p.comptage !== "refusee" && !p.res_statut && p.debut_aff && new Date(p.debut_aff).getTime() < limite)
+    anaPrev.filter((p) => p.comptage !== "refusee" && !(aVal(p.version_contrat) && p.type_prevision !== "match") && !p.res_statut && p.debut_aff && new Date(p.debut_aff).getTime() < limite)
       .forEach((p) => al.push("Résultat manquant depuis plus de 48 h : " + titrePrevision(p)));
     if (al.length) {
       const a = el("div", "carte alerte-ana");
@@ -1188,8 +1188,11 @@
       } else {
         if (fc && aVal(fc.p)) l.appendChild(el("p", "petit", (fc.nom || "?") + " favorite : " + fmtPct(fc.p)));
         else l.appendChild(el("p", "discret petit", "Prévision de cette carte : —"));
-        if (p && aVal(p.condition_marche)) l.appendChild(el("p", "discret petit", "Jouée seulement si : " + p.condition_marche));
-        if (p && aVal(p.p_existe)) l.appendChild(el("p", "discret petit", "Chance qu'elle soit jouée : " + fmtPct(p.p_existe)));
+        // v2.30 : condition et chance d'exister seulement quand la carte n'est pas toujours jouée (carte 3)
+        if (p && aVal(p.p_existe) && Number(p.p_existe) < 1) {
+          if (aVal(p.condition_marche)) l.appendChild(el("p", "discret petit", "Condition : " + String(p.condition_marche).replace(/^./, (c) => c.toUpperCase())));
+          l.appendChild(el("p", "discret petit", "Chance qu'elle soit jouée : " + fmtPct(p.p_existe)));
+        }
         if (p && p.res_statut === "evalue") {
           const gn = p.res_gagnant === 1 ? p.equipe1_nom : p.res_gagnant === 2 ? p.equipe2_nom : null;
           l.appendChild(el("p", "petit", "Gagnant : " + (gn || "—") + (aVal(p.res_score1) ? " · " + p.res_score1 + "–" + p.res_score2 : "")));

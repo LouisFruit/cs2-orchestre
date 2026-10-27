@@ -927,7 +927,10 @@
     const trouve = (cle) => marches.find((m) => m.marche === cle) || null;
     const lignes = [
       { cle: "vainqueur_match", libelle: "Vainqueur du match", etudie: true },
-      { cle: "vainqueur_carte", libelle: "Vainqueur d'une carte", etudie: false },
+      { cle: "vainqueur_carte", libelle: "Vainqueur d'une carte (n'importe laquelle)", etudie: false },
+      { cle: "vainqueur_carte_1", libelle: "Vainqueur de la carte 1", etudie: false, detail: true },
+      { cle: "vainqueur_carte_2", libelle: "Vainqueur de la carte 2", etudie: false, detail: true },
+      { cle: "vainqueur_carte_3", libelle: "Vainqueur de la carte 3 (jouée seulement à 1-1)", etudie: false, detail: true },
       { cle: "au_moins_une_carte", libelle: "Gagne au moins une carte", etudie: false }
     ];
     const c = el("div", "carte marches");
@@ -940,6 +943,14 @@
       bloc.appendChild(tete);
       if (!l.etudie) {
         tete.appendChild(el("span", "marche-later", "Marché étudié plus tard"));
+        // v2.31 : par carte, on montre seulement le nombre de cas déjà évalués, sans conclusion
+        if (l.detail && m) {
+          const nn = aVal(m.n_evalues) ? Number(m.n_evalues) : 0;
+          let t = nn + " évaluée" + (nn > 1 ? "s" : "") + " · aucune conclusion";
+          if (aVal(m.p_existe_moyenne)) t += " · chance moyenne d'être jouée : " + fmtPct(m.p_existe_moyenne);
+          if (aVal(m.taux_existe_observe)) t += " · jouée dans " + fmtPct(m.taux_existe_observe) + " des cas";
+          bloc.appendChild(el("p", "discret petit", t));
+        }
         c.appendChild(bloc);
         return;
       }

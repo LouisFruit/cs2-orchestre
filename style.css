@@ -292,3 +292,10 @@ details summary{cursor:pointer;font-weight:600}
 .stockage .stockage-ligne .nom{min-width:0;overflow-wrap:anywhere}
 .essais summary{cursor:pointer;font-weight:600}
 .essais{margin-top:12px}
+.carte-match{padding:0}
+.carte-prev-haut{display:block;width:100%;text-align:left;color:var(--texte);font-size:1rem;background:none;border:0;padding:12px}
+.carte-prev-haut p{margin:4px 0}
+.detail-cartes{border-top:1px solid var(--bord);padding:8px 12px}
+.detail-cartes summary{cursor:pointer;font-weight:600}
+.ligne-carte{padding:6px 0;border-top:1px dashed var(--bord)}
+.ligne-carte p{margin:2px 0}

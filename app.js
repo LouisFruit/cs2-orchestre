@@ -813,6 +813,7 @@
 
   /* ---------- écran Analyse (v2.8) : test à blanc ---------- */
   // L'appli n'affiche que ce que l'analyse exporte : aucune statistique n'est calculée ici.
+  let anaVetos = {};
   let anaPrev = [], anaEssais = [], anaSyn = null, anaFiltre = "carte", anaLarge = true;
   const LIB_FORCE = { equilibre: "équilibré", leger_favori: "léger favori", favori_net: "favori net" };
   const TIERS = { s: "Tier S", a: "Tier A", b: "Tier B", sa_estime: "S/A (estimé)" };
@@ -931,6 +932,18 @@
       } catch (e) { /* facultatif */ }
     }
     anaPrev.sort((a, b) => (b.debut_aff || "").localeCompare(a.debut_aff || ""));
+    // v2.33 : veto connu (match en direct ou terminé) pour afficher le nom des cartes
+    anaVetos = {};
+    try {
+      const idsV = Array.from(new Set(anaPrev.map((p) => p.hltv_id).filter(Boolean)));
+      if (idsV.length) {
+        const rv = await Promise.all([
+          sb.from("app_replay_veto").select("hltv_match_id,veto").in("hltv_match_id", idsV),
+          sb.from("app_direct_veto").select("hltv_match_id,veto").in("hltv_match_id", idsV)
+        ]);
+        rv.forEach((r) => { if (!r.error) (r.data || []).forEach((x) => { if (Array.isArray(x.veto)) anaVetos[String(x.hltv_match_id)] = x.veto; }); });
+      }
+    } catch (e) { /* facultatif : sans veto, on garde « Carte n » */ }
     // v2.28 : les essais sont mis à part, ils ne comptent dans aucun résumé ni alerte des prévisions officielles
     anaEssais = anaPrev.filter(estEssai);
     anaPrev = anaPrev.filter((p) => !estEssai(p));
@@ -1128,6 +1141,16 @@
     });
   }
 
+  // Cartes dans l'ordre de jeu d'après le veto : cartes choisies dans l'ordre, puis la carte restante
+  function nomsCartesVeto(veto) {
+    if (!Array.isArray(veto)) return [];
+    const l = veto.slice().sort((a, b) => a.n - b.n);
+    const noms = l.filter((v) => v.action === "picked").map((v) => v.carte);
+    const reste = l.find((v) => v.action === ACTION_RESTANTE);
+    if (reste) noms.push(reste.carte);
+    return noms;
+  }
+
   // Point de jauge pour le match
   function pointMatch(g) {
     if (g.match) return pointDe(g.match);
@@ -1211,7 +1234,9 @@
       const nonJouee = (p && p.res_statut === "non_evaluee") || (!p && em.fini);
       const fc = g.nouveau ? (p ? pointDe(p) : null) : pointDe(b);
       const l = el("div", "ligne-carte" + (nonJouee ? " grise" : ""));
-      l.appendChild(el("strong", null, "Carte " + n));
+      const nomsVeto = nomsCartesVeto(anaVetos[String(b.hltv_id || "")]);
+      const nomC = (p && aVal(p.res_carte)) ? p.res_carte : nomsVeto[n - 1];
+      l.appendChild(el("strong", null, "Carte " + n + (nomC ? " · " + nomCarte(nomC) : "")));
       if (nonJouee) {
         l.appendChild(el("p", "petit", "Non jouée. Exclue des calculs."));
       } else {

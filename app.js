@@ -103,6 +103,7 @@
     try {
       derniereMaj = Date.now();
       majPastille();
+      verifierRemplissageBase();
       if (pageCourante === "collecte") await chargerCollecte();
       else if (pageCourante === "matchs") await chargerMatchs();
       else if (pageCourante === "analyse") await chargerAnalyse();
@@ -251,6 +252,23 @@
     if (o >= 1e9) return (o / 1e9).toFixed(2).replace(".", ",") + " Go";
     return Math.round(o / 1048576) + " Mo";
   }
+  // v2.32 : alerte visible sur toutes les pages quand la base atteint 90 % de la limite
+  const SEUIL_ALERTE_BASE = 0.9;
+  async function verifierRemplissageBase() {
+    const b = $("bandeau-base");
+    if (!b) return;
+    try {
+      const r = await sb.rpc("app_taille_base");
+      if (r.error || !r.data || !r.data.octets) { b.classList.add("cache"); return; }
+      const part = r.data.octets / r.data.limite_octets;
+      if (part >= SEUIL_ALERTE_BASE) {
+        b.textContent = "⚠ Base remplie à " + Math.round(part * 100) + " % (" + octetsLisibles(r.data.octets) + " sur " + octetsLisibles(r.data.limite_octets) + "). À 100 %, les écritures sont refusées et la collecte s'arrête : une purge est à décider maintenant.";
+        b.classList.remove("cache");
+      } else {
+        b.classList.add("cache");
+      }
+    } catch (e) { b.classList.add("cache"); }
+  }
   async function chargerStockage() {
     const zone = $("carte-stockage");
     if (!zone) return;
@@ -261,7 +279,7 @@
     const d = r.data;
     const part = d.octets / d.limite_octets;
     const pct = Math.round(part * 100);
-    const statut = part >= 0.85 ? "silencieux" : (part >= 0.7 ? "en_retard" : "ok");
+    const statut = part >= SEUIL_ALERTE_BASE ? "silencieux" : (part >= 0.7 ? "en_retard" : "ok");
     const sec = section("stockage", "Remplissage de la base", statut, pct + " %", { ferme: true });
     const c = sec.corps;
     c.classList.add("stockage");
@@ -273,7 +291,7 @@
     piste.appendChild(rempli);
     c.appendChild(piste);
     c.appendChild(el("div", "detail", octetsLisibles(d.octets) + " utilisés sur " + octetsLisibles(d.limite_octets) + " (limite du plan gratuit)"));
-    c.appendChild(el("div", "detail discret petit", "Orange à partir de 70 %, rouge à partir de 85 %. Au-delà de 100 %, les écritures sont refusées et la collecte s'arrête."));
+    c.appendChild(el("div", "detail discret petit", "Orange à partir de 70 %, rouge et alerte sur toutes les pages à partir de 90 %. Au-delà de 100 %, les écritures sont refusées et la collecte s'arrête."));
     if (d.grosses && d.grosses.length) {
       c.appendChild(el("div", "detail petit stockage-titre", "Les 5 plus grosses tables"));
       d.grosses.forEach((t) => {

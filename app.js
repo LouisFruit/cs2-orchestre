@@ -905,7 +905,7 @@
   async function chargerAnalyse() {
     const zone = $("analyse-contenu");
     const [pr, sy] = await Promise.all([
-      sb.from("app_analyse_previsions").select("*").order("debut_retenu_utc", { ascending: false }).limit(300),
+      sb.from("app_analyse_previsions").select("*").order("debut_saisie_utc", { ascending: false }).limit(500), // v2.34 : tri sur le début programmé (toujours rempli) ; le début retenu est presque toujours vide
       sb.from("app_analyse_synthese").select("*").order("calcule_le", { ascending: false }).limit(1)
     ]);
     vider(zone);

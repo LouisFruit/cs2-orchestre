@@ -249,8 +249,9 @@
 
   /* ---------- jauge de remplissage de la base (v2.27) ---------- */
   function octetsLisibles(o) {
+    // v2.35 : Mo décimaux (1 Mo = 1 000 000 o), comme le tableau de bord Supabase (limite 500 Mo = 500 000 000 o)
     if (o >= 1e9) return (o / 1e9).toFixed(2).replace(".", ",") + " Go";
-    return Math.round(o / 1048576) + " Mo";
+    return Math.round(o / 1e6) + " Mo";
   }
   // v2.32 : alerte visible sur toutes les pages quand la base atteint 90 % de la limite
   const SEUIL_ALERTE_BASE = 0.9;
@@ -291,6 +292,11 @@
     piste.appendChild(rempli);
     c.appendChild(piste);
     c.appendChild(el("div", "detail", octetsLisibles(d.octets) + " utilisés sur " + octetsLisibles(d.limite_octets) + " (limite du plan gratuit)"));
+    // v2.35 : les deux pourcentages (décimal = mesure de Supabase ; binaire = à titre d'information)
+    if (d.limite_binaire_octets) {
+      const pctBin = Math.round(d.octets / d.limite_binaire_octets * 100);
+      c.appendChild(el("div", "detail discret petit", pct + " % en Mo décimaux (comme le tableau de bord Supabase) · " + pctBin + " % si l'on comptait 500 Mo binaires (" + octetsLisibles(d.limite_binaire_octets) + ")."));
+    }
     c.appendChild(el("div", "detail discret petit", "Orange à partir de 70 %, rouge et alerte sur toutes les pages à partir de 90 %. Au-delà de 100 %, les écritures sont refusées et la collecte s'arrête."));
     if (d.grosses && d.grosses.length) {
       c.appendChild(el("div", "detail petit stockage-titre", "Les 5 plus grosses tables"));
@@ -612,12 +618,14 @@
         const c = el("div", "carte");
         c.appendChild(el("strong", null, f.famille));
         c.appendChild(el("p", "discret petit", f.description));
-        let t = "Total : " + nombre(f.total);
+        let t = "Total collecté : " + nombre(f.total); // v2.35
         if (f.dernieres_24h !== null && f.dernieres_24h !== undefined) t += " · 24 h : " + nombre(f.dernieres_24h);
         c.appendChild(el("p", "petit", t));
         if (f.derniere) c.appendChild(el("p", "discret petit", "Dernier ajout : " + heurePar(f.derniere)));
         zone.appendChild(c);
       });
+      // v2.35 : précision sur les totaux (copies du PC)
+      if ((d.data || []).length) zone.appendChild(el("p", "discret petit", "« Total collecté » = tout ce qui a été collecté, copies du PC comprises : pour certaines familles (rounds, économie par round, stats des joueurs de bo3.gg ; cotes ; événements HLTV), ce total est plus grand que ce qui reste dans la base."));
       const liste = el("div", "carte");
       liste.appendChild(el("strong", null, "Derniers éléments reçus"));
       if (!(l.data || []).length) liste.appendChild(el("p", "discret petit", "Rien pour le moment."));

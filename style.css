@@ -299,3 +299,19 @@ details summary{cursor:pointer;font-weight:600}
 .detail-cartes summary{cursor:pointer;font-weight:600}
 .ligne-carte{padding:6px 0;border-top:1px dashed var(--bord)}
 .ligne-carte p{margin:2px 0}
+
+/* v2.36 : écran « Prévisions » */
+.prev-match{padding:0}
+.prev-match>summary{list-style:none;cursor:pointer;padding:12px}
+.prev-match>summary::-webkit-details-marker{display:none}
+.prev-resume .prev-sous{margin:2px 0 6px}
+.prev-probas{display:flex;justify-content:space-between;gap:8px;font-size:.95rem}
+.prev2{display:flex;height:8px;border-radius:4px;overflow:hidden;margin:6px 0;background:var(--bord)}
+.prev2-a{background:var(--ea)} .prev2-b{background:var(--eb)}
+.prev-tags{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:4px}
+.prev-corps{padding:0 12px 12px;border-top:1px solid var(--bord)}
+.prev-corps .ligne-carte{margin-top:10px}
+.prev-essai{border-style:dashed}
+.prev-resume{font-weight:400}
+.prev-corps .ligne-carte{display:block;border-top:1px dashed var(--bord);padding-top:8px}
+.prev-corps .ligne-carte .prev-tete{display:flex;justify-content:space-between;align-items:center;gap:8px}

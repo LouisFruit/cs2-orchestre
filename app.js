@@ -1136,13 +1136,24 @@
   }
 
   function resumeReussite(groupes) {
-    const ev = groupes.filter((g) => g.match && g.match.res_statut === "evalue");
+    // Compte par MATCH (un match = un seul compte, même s'il a plusieurs prévisions : on garde la plus récente), officielles seulement
+    const parMatch = {};
+    groupes.forEach((g) => {
+      if (!(g.match && g.match.res_statut === "evalue")) return;
+      const k = String(g.base.hltv_id || g.base.hltv_match_id || g.id);
+      const cree = String(g.match.cree_le || "");
+      if (!parMatch[k] || cree > String(parMatch[k].match.cree_le || "")) parMatch[k] = g;
+    });
+    const ev = Object.keys(parMatch).map((k) => parMatch[k]);
     const n = ev.length, j = ev.filter((g) => g.match.res_juste).length;
     const r = el("div", "carte");
     r.appendChild(el("strong", null, "Prévisions de vainqueur du match, déjà jouées"));
-    if (!n) { r.appendChild(el("p", "discret petit", "Aucune prévision évaluée avec ce filtre.")); return r; }
-    r.appendChild(el("p", null, j + " justes sur " + n + " évaluées (" + fmtNb(j / n * 100, 0) + " %)"));
-    r.appendChild(el("p", "discret petit", "Fiabilité : " + libFiabilite(n) + ". Un pourcentage sur peu de matchs peut tromper : regarde toujours le nombre."));
+    if (n < 10) {
+      r.appendChild(el("p", null, "Trop peu de matchs (" + n + " évalué" + (n > 1 ? "s" : "") + ")"));
+    } else {
+      r.appendChild(el("p", null, j + " justes sur " + n + " matchs évalués (" + fmtNb(j / n * 100, 0) + " %)"));
+    }
+    r.appendChild(el("p", "discret petit", "Fiabilité : " + libFiabilite(n) + ". Résultats lus dans la base de la Collecte. Descriptif, pas un test de l'agent."));
     return r;
   }
 

@@ -931,6 +931,11 @@
       chargerToutesPrevisions(), // v2.36 : lecture par pages de 200 lignes, sans plafond (v2.34 : tri sur le début programmé, toujours rempli)
       sb.from("app_analyse_synthese").select("*").order("calcule_le", { ascending: false }).limit(1)
     ]);
+    // v2.37 : rechargement automatique sans effet si les données n'ont pas changé (la page garde sa position et ses cartes ouvertes)
+    const sig = pr.error ? "erreur" : JSON.stringify([(pr.data || []).map((p) => [p.id_saisie, p.type_prevision, p.carte_no, p.res_statut, p.res_juste, p.cree_le, p.tier, p.p_equipe1]), sy.error ? null : (sy.data && sy.data[0] ? sy.data[0].calcule_le : null)]);
+    if (sig === anaSignature && zone.firstChild) return;
+    anaSignature = sig;
+    const yAvant = window.scrollY;
     vider(zone);
     if (pr.error) {
       const c = el("div", "carte");
@@ -940,7 +945,7 @@
       return;
     }
     anaPrev = (pr.data || []).slice();
-    prevLignesLues = anaPrev.length; prevPartielle = !!pr.partielle; prevNb = PREV_PAS;
+    prevLignesLues = anaPrev.length; prevPartielle = !!pr.partielle;
     anaPrev.forEach((p) => { p.hltv_id = idHltvPrevision(p); p.debut_aff = p.debut_retenu_utc || p.debut_saisie_utc || null; });
     // Début manquant : on prend l'heure de début du match dans la liste des matchs
     const sansDebut = anaPrev.filter((p) => !p.debut_aff && p.hltv_id);
@@ -973,6 +978,7 @@
     anaPrev = anaPrev.filter((p) => !estEssai(p));
     anaSyn =!sy.error && sy.data && sy.data.length ? sy.data[0] : null;
     dessinerAnalyse();
+    if (yAvant > 0) window.scrollTo(0, yAvant);
   }
 
   // Carte « bons pronostics par marché » : une ligne par marché, alimentée par le champ « marches » de la synthèse
@@ -1031,8 +1037,10 @@
 
   /* ---------- écran « Prévisions » (v2.36) : lecture seule, une ligne par match ---------- */
   // Affichage seulement : aucune cote, aucun conseil de pari. Le palier est celui de chaque ligne, jamais fusionné.
-  const PREV_PAS = 15;
-  let prevPalier = "tous", prevNb = PREV_PAS, prevLignesLues = 0, prevPartielle = false;
+  // v2.37 : liste continue (plus de « 15 de plus ») ; l'écran garde ses cartes ouvertes et sa position au rechargement automatique
+  let prevPalier = "tous", prevLignesLues = 0, prevPartielle = false;
+  const prevOuverts = new Set();
+  let prevPassesOuvert = true, prevEssaisOuvert = false, anaSignature = null;
 
   function pMatchGroupe(g) {
     if (g.match && aVal(g.match.p_equipe1)) return Number(g.match.p_equipe1);
@@ -1069,6 +1077,9 @@
   function carteMatchPrevision(g, essai) {
     const b = g.base;
     const det = el("details", "carte prev-match" + (essai ? " prev-essai" : ""));
+    const cle = (essai ? "e:" : "o:") + g.id;
+    if (prevOuverts.has(cle)) det.open = true;
+    det.addEventListener("toggle", () => { if (det.open) prevOuverts.add(cle); else prevOuverts.delete(cle); });
     const sm = el("summary", "prev-resume");
     const tete = el("div", "prev-tete");
     tete.appendChild(el("strong", null, (b.equipe1_nom || "?") + " – " + (b.equipe2_nom || "?")));
@@ -1168,45 +1179,53 @@
     const aVenirG = groupes.filter((g) => debutDe(g) > maintenant).sort((a, b) => debutDe(a) - debutDe(b));
     const passesG = groupes.filter((g) => debutDe(g) <= maintenant).sort((a, b) => debutDe(b) - debutDe(a));
 
-    // Contrôle : lignes lues contre lignes affichables
+    // Contrôle : lignes lues contre prévisions affichées
     const nOff = anaPrev.length, nEss = anaEssais.length;
-    cont.appendChild(el("p", "discret petit", "Lignes lues dans la base : " + prevLignesLues + " (" + nOff + " officielles, " + nEss + " d'essai) · " + tousG.length + " prévisions officielles, " + tousE.length + " d'essai" + (prevPartielle ? " · ATTENTION : lecture incomplète" : "")));
+    const ctrl = el("p", "discret petit");
+    cont.appendChild(ctrl);
+    const majControle = () => {
+      const aff = aVenirG.length + (prevPassesOuvert ? passesG.length : 0);
+      ctrl.textContent = "Lignes lues dans la base : " + prevLignesLues + " (" + nOff + " officielles, " + nEss + " d'essai) · " + tousG.length + " prévisions officielles, " + tousE.length + " d'essai · " + aff + " prévisions affichées sur " + groupes.length + (prevPassesOuvert ? "" : " (Passés repliés)") + (prevPartielle ? " · ATTENTION : lecture incomplète" : "");
+    };
+    majControle();
 
     const fl = el("div", "filtres");
     [["tous", "Tous"], ["s", "Palier S"], ["a", "Palier A"], ["b", "Palier B"]].forEach(([k, t]) => {
       const bt = el("button", "filtre" + (prevPalier === k ? " actif" : ""), t);
       bt.type = "button";
-      bt.addEventListener("click", () => { prevPalier = k; prevNb = PREV_PAS; dessinerListePrevisions(cont); });
+      bt.addEventListener("click", () => { prevPalier = k; dessinerListePrevisions(cont); });
       fl.appendChild(bt);
     });
     cont.appendChild(fl);
 
     cont.appendChild(resumeReussite(passesG));
 
-    const suite = aVenirG.concat(passesG);
-    const montres = suite.slice(0, prevNb);
-    const nAV = aVenirG.length;
-    let titreAV = false, titrePS = false;
-    montres.forEach((g, i) => {
-      if (i < nAV && !titreAV) { cont.appendChild(el("h3", "titre-jour", "À venir (" + nAV + ")")); titreAV = true; }
-      if (i >= nAV && !titrePS) { cont.appendChild(el("h3", "titre-jour", "Passés (" + passesG.length + ")")); titrePS = true; }
-      cont.appendChild(carteMatchPrevision(g, false));
-    });
-    if (!suite.length) cont.appendChild(el("p", "discret petit", "Aucune prévision avec ce filtre."));
-    if (suite.length > montres.length) {
-      const plus = el("button", "bouton secondaire", "Afficher " + Math.min(PREV_PAS, suite.length - montres.length) + " de plus (" + montres.length + " affichés sur " + suite.length + ")");
-      plus.type = "button";
-      plus.addEventListener("click", () => { prevNb += PREV_PAS; dessinerListePrevisions(cont); });
-      cont.appendChild(plus);
-    } else if (suite.length) {
-      cont.appendChild(el("p", "discret petit", suite.length + " prévisions affichées sur " + suite.length + "."));
-    }
+    cont.appendChild(el("h3", "titre-jour", "À venir (" + aVenirG.length + ")"));
+    if (!aVenirG.length) cont.appendChild(el("p", "discret petit", "Aucune prévision à venir avec ce filtre."));
+    aVenirG.forEach((g) => cont.appendChild(carteMatchPrevision(g, false)));
+
+    // Passés : ouverts par défaut, repliables ; cartes dessinées à l'ouverture seulement
+    const dp = el("details", "bloc-passes");
+    dp.open = prevPassesOuvert;
+    dp.appendChild(el("summary", "titre-jour", "Passés (" + passesG.length + ")"));
+    const corpsP = el("div");
+    dp.appendChild(corpsP);
+    let dessines = false;
+    const dessinerPasses = () => { if (dessines) return; dessines = true; passesG.forEach((g) => corpsP.appendChild(carteMatchPrevision(g, false))); };
+    if (dp.open) dessinerPasses();
+    dp.addEventListener("toggle", () => { prevPassesOuvert = dp.open; if (dp.open) dessinerPasses(); majControle(); });
+    if (!passesG.length) corpsP.appendChild(el("p", "discret petit", "Aucune prévision passée avec ce filtre."));
+    cont.appendChild(dp);
 
     // Essais : séparés et marqués
     if (tousE.length) {
       const d = el("details", "carte");
+      d.open = prevEssaisOuvert;
       d.appendChild(el("summary", null, "Essais (" + tousE.length + " prévisions, " + nEss + " lignes) : ne comptent dans aucun chiffre"));
-      tousE.filter(dansPalier).forEach((g) => d.appendChild(carteMatchPrevision(g, true)));
+      let faits = false;
+      const faire = () => { if (faits) return; faits = true; tousE.filter(dansPalier).forEach((g) => d.appendChild(carteMatchPrevision(g, true))); };
+      if (d.open) faire();
+      d.addEventListener("toggle", () => { prevEssaisOuvert = d.open; if (d.open) faire(); });
       cont.appendChild(d);
     }
   }

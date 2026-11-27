@@ -6,7 +6,7 @@
   });
 
   const $ = (id) => document.getElementById(id);
-  const TITRES = { collecte: "Collecte", direct: "En direct", matchs: "Matchs", analyse: "Analyse", paris: "Paris", reglages: "Réglages", alertes: "Alertes", notif: "Réglage des alertes" };
+  const TITRES = { collecte: "Collecte", direct: "En direct", matchs: "Matchs", analyse: "Analyse", paris: "Paris", reglages: "Réglages", alertes: "Alertes", notif: "Réglage des alertes", agent: "Agent" };
   let pageCourante = "collecte";
   let minuteur = null;
   let matchsCache = [];
@@ -82,7 +82,7 @@
     document.querySelectorAll(".page").forEach((p) => p.classList.add("cache"));
     $("page-" + page).classList.remove("cache");
     document.querySelectorAll(".onglets button").forEach((b) =>
-      b.classList.toggle("actif", b.dataset.page === page));
+      b.classList.toggle("actif", b.dataset.page === page || (page === "agent" && b.dataset.page === "paris")));
     $("titre-page").textContent = TITRES[page];
     rafraichir();
   }
@@ -108,6 +108,7 @@
       else if (pageCourante === "matchs") await chargerMatchs();
       else if (pageCourante === "analyse") await chargerAnalyse();
       else if (pageCourante === "paris") await chargerParis();
+      else if (pageCourante === "agent") await chargerAgent();
       else if (pageCourante === "reglages") await chargerReglages();
       else if (pageCourante === "alertes") await chargerAlertes();
       else if (pageCourante === "notif") await chargerReglageNotif();
@@ -1239,6 +1240,219 @@
     dessinerListePrevisions(cont);
     return c;
   }
+
+  /* ---------- écran « Agent » (v2.38) : lecture seule de la vue app_agent_decisions, ARGENT FICTIF ---------- */
+  // Aucune écriture ; aucune vue posée par l'Appli ; totaux, tranches et simulation Kelly calculés ici (agent-calcul.js).
+  const AC = window.AgentCalcul;
+  let agRows = [], agLignesLues = 0, agPartielle = false, agSignature = null;
+  let agVersion = null, agOnglet = "decisions", agLecture = "moment", agMoment = "tous";
+
+  async function chargerToutesDecisions() {
+    const PAGE = 200, out = [];
+    for (let de = 0; de < 100000; de += PAGE) {
+      const r = await sb.from("app_agent_decisions").select("*")
+        .order("decide_le_utc", { ascending: true }).order("id", { ascending: true }).range(de, de + PAGE - 1);
+      if (r.error) return { data: out, error: out.length ? null : r.error, partielle: out.length > 0 };
+      const d = r.data || [];
+      out.push(...d);
+      if (d.length < PAGE) break;
+    }
+    return { data: out, error: null, partielle: false };
+  }
+
+  async function chargerAgent() {
+    const zone = $("agent-contenu");
+    const r = await chargerToutesDecisions();
+    if (r.error) {
+      vider(zone);
+      const c = el("div", "carte");
+      c.appendChild(el("strong", null, "En attente des données"));
+      c.appendChild(el("p", "discret petit", "La liste des décisions de l'agent n'est pas lisible pour le moment."));
+      zone.appendChild(c);
+      agSignature = "erreur";
+      return;
+    }
+    const sig = JSON.stringify((r.data || []).map((d) => [d.id, d.statut, d.gain_unites, d.regle_le, d.version_agent]));
+    if (sig === agSignature && zone.firstChild) return;
+    agSignature = sig;
+    agLignesLues = (r.data || []).length;
+    agPartielle = !!r.partielle;
+    agRows = (r.data || []).filter((d) => d.demo !== true); // la démonstration n'apparaît jamais
+    const yAvant = window.scrollY;
+    dessinerAgent();
+    if (yAvant > 0) window.scrollTo(0, yAvant);
+  }
+
+  function puceStatut(st) {
+    if (st === "gagne") return el("span", "puce juste", "Gagné");
+    if (st === "perdu") return el("span", "puce rate", "Perdu");
+    if (st === "annule") return el("span", "puce nonev", "Annulé");
+    return el("span", "puce avenir", "En attente");
+  }
+  const u2 = (x) => (x === null || x === undefined || x === "" ? "—" : Number(x).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  const sgn = (x) => (x > 0 ? "+" : "") + u2(x);
+
+  function badgeFaible(n) { return n < 30 ? el("span", "badge-gris", "échantillon faible") : null; }
+
+  function ligneRoi(a) {
+    const l = el("span", "roi-ligne");
+    const r = AC.roi(a);
+    l.appendChild(el("strong", null, "ROI " + (r === null ? "—" : fmtNb(r * 100, 1) + " %")));
+    l.appendChild(document.createTextNode(" · gain " + (a.termines ? sgn(a.gain) : "—") + " u · " + a.termines + " pari" + (a.termines > 1 ? "s" : "") + " terminé" + (a.termines > 1 ? "s" : "") + " "));
+    const b = badgeFaible(a.termines); if (b) l.appendChild(b);
+    return l;
+  }
+
+  function courbeSvg(points, fmtY) {
+    const W = 320, H = 110, P = 8;
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H); svg.setAttribute("class", "courbe-agent");
+    if (points.length < 2) return null;
+    const ys = points.map((p) => p.y), mn = Math.min.apply(null, ys), mx = Math.max.apply(null, ys), sp = (mx - mn) || 1;
+    const X = (i) => P + (W - 2 * P) * i / (points.length - 1), Y = (v) => H - P - (H - 2 * P) * (v - mn) / sp;
+    const poly = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    poly.setAttribute("points", points.map((p, i) => X(i).toFixed(1) + "," + Y(p.y).toFixed(1)).join(" "));
+    poly.setAttribute("fill", "none"); poly.setAttribute("stroke", "currentColor"); poly.setAttribute("stroke-width", "2");
+    svg.appendChild(poly);
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("x", W - P); t.setAttribute("y", 12); t.setAttribute("text-anchor", "end"); t.setAttribute("class", "courbe-txt");
+    t.textContent = fmtY(points[points.length - 1].y);
+    svg.appendChild(t);
+    return svg;
+  }
+
+  function dessinerAgent() {
+    const zone = $("agent-contenu");
+    vider(zone);
+    zone.appendChild(el("div", "bandeau fantome", "👻 ARGENT FICTIF : aucune mise réelle. Lecture seule : ce que fait l'agent, jamais un conseil de pari."));
+
+    const versions = [];
+    agRows.forEach((d) => { const v = d.version_agent || "version inconnue"; if (!versions.includes(v)) versions.push(v); });
+    versions.sort();
+    if (!agVersion || !versions.includes(agVersion)) {
+      const dernier = agRows.slice().sort((a, b) => String(b.decide_le_utc).localeCompare(String(a.decide_le_utc)))[0];
+      agVersion = dernier ? (dernier.version_agent || "version inconnue") : null;
+    }
+    const lignesV = agRows.filter((d) => (d.version_agent || "version inconnue") === agVersion);
+    const dansMoment = (d) => agMoment === "tous" || d.moment === agMoment;
+    const rowsF = lignesV.filter(dansMoment);
+
+    if (!agRows.length) {
+      const c = el("div", "carte");
+      c.appendChild(el("strong", null, "Aucune décision pour l'instant"));
+      c.appendChild(el("p", "discret petit", "L'agent n'a encore rien décidé (ou rien n'est encore importé). Totaux : 0 pari, ROI —."));
+      zone.appendChild(c);
+      zone.appendChild(el("p", "discret petit", "Lignes lues : 0 · 0 décision affichée sur 0"));
+      return;
+    }
+
+    // Version : jamais mélangées
+    const ver = el("div", "filtres");
+    versions.forEach((v) => { const b = el("button", "filtre" + (v === agVersion ? " actif" : ""), "Agent " + v); b.type = "button"; b.addEventListener("click", () => { agVersion = v; dessinerAgent(); }); ver.appendChild(b); });
+    zone.appendChild(ver);
+    zone.appendChild(el("h3", "titre-version", "Version de l'agent : " + agVersion));
+
+    // Totaux de la version (mise plate = mesure officielle)
+    const tot = AC.total(rowsF);
+    const cT = el("div", "carte");
+    cT.appendChild(el("strong", null, "Mise plate (1 unité) : la mesure"));
+    cT.appendChild(el("p", null, tot.n + " décision" + (tot.n > 1 ? "s" : "") + " · " + tot.gagnes + " gagnée" + (tot.gagnes > 1 ? "s" : "") + " sur " + tot.termines + " terminée" + (tot.termines > 1 ? "s" : "") + " · " + tot.attente + " en attente · " + tot.annules + " annulée" + (tot.annules > 1 ? "s" : "")));
+    const pr = el("p"); pr.appendChild(ligneRoi(tot)); cT.appendChild(pr);
+    zone.appendChild(cT);
+
+    // Contrôle de lecture
+    zone.appendChild(el("p", "discret petit", "Lignes lues : " + agLignesLues + " · " + lignesV.length + " décisions de cette version, " + rowsF.length + " affichées sur " + rowsF.length + (agPartielle ? " · ATTENTION : lecture incomplète" : "")));
+
+    // Onglets de lecture et filtre moment
+    const on = el("div", "filtres");
+    [["decisions", "Décisions"], ["totaux", "Totaux"], ["kelly", "Simulation Kelly"]].forEach(([k, t]) => { const b = el("button", "filtre" + (agOnglet === k ? " actif" : ""), t); b.type = "button"; b.addEventListener("click", () => { agOnglet = k; dessinerAgent(); }); on.appendChild(b); });
+    zone.appendChild(on);
+    if (agOnglet !== "kelly") {
+      const fm = el("div", "filtres");
+      [["tous", "Tous"], ["avant_match", "Avant match"], ["en_direct", "En direct"]].forEach(([k, t]) => { const b = el("button", "filtre" + (agMoment === k ? " actif" : ""), t); b.type = "button"; b.addEventListener("click", () => { agMoment = k; dessinerAgent(); }); fm.appendChild(b); });
+      zone.appendChild(fm);
+    }
+
+    if (agOnglet === "decisions") dessinerAgentDecisions(zone, rowsF);
+    else if (agOnglet === "totaux") dessinerAgentTotaux(zone, rowsF);
+    else dessinerAgentKelly(zone, lignesV);
+  }
+
+  function dessinerAgentDecisions(zone, rows) {
+    const liste = rows.slice().sort((a, b) => String(b.decide_le_utc).localeCompare(String(a.decide_le_utc)) || b.id - a.id);
+    if (!liste.length) zone.appendChild(el("p", "discret petit", "Aucune décision avec ce filtre."));
+    liste.forEach((d) => {
+      const det = el("details", "carte prev-match");
+      const sm = el("summary", "prev-resume");
+      const tete = el("div", "prev-tete");
+      tete.appendChild(el("strong", null, (d.equipe1 || "?") + " – " + (d.equipe2 || "?")));
+      tete.appendChild(puceStatut(d.statut));
+      sm.appendChild(tete);
+      const marche = [d.marche || "marché inconnu", d.issue, d.ligne !== null && d.ligne !== undefined ? "ligne " + d.ligne : null].filter(Boolean).join(" · ");
+      sm.appendChild(el("p", "petit", marche + (aVal(d.nom_carte) ? " · " + nomCarte(d.nom_carte) : (aVal(d.carte) && Number(d.carte) > 0 ? " · carte " + d.carte : ""))));
+      const quand = d.moment === "en_direct" ? "En direct" + (aVal(d.round_decision) ? " R" + d.round_decision : "") : (d.moment === "avant_match" ? "Avant match" : "Moment inconnu");
+      const tags = el("div", "prev-tags");
+      tags.appendChild(el("span", "badge", quand + " · " + (d.decide_le_utc ? heureSeule(d.decide_le_utc) : "—")));
+      if (aVal(d.tier)) tags.appendChild(el("span", "badge", "Palier " + String(d.tier).toUpperCase()));
+      sm.appendChild(tags);
+      sm.appendChild(el("p", "petit", "p agent " + fmtPct(d.p_agent) + " · cote " + u2(d.cote_prise) + " · mise " + u2(d.mise_unites) + " u" + (d.statut === "gagne" || d.statut === "perdu" ? " · gain " + sgn(d.gain_unites) + " u" : "")));
+      det.appendChild(sm);
+      const corps = el("div", "prev-corps");
+      if (aVal(d.note)) corps.appendChild(el("p", "petit", "Justification : " + d.note));
+      if (aVal(d.ressources)) corps.appendChild(el("p", "discret petit", "Ressources : " + d.ressources));
+      const meta = [aVal(d.tournoi) ? d.tournoi : null, aVal(d.bo) ? "BO" + d.bo : null, d.score_e1 !== null && d.score_e1 !== undefined ? "score à la décision " + d.score_e1 + "–" + d.score_e2 : null, aVal(d.equipe_pariee) ? "équipe pariée : " + d.equipe_pariee : null, d.regle_le ? "réglée le " + heurePar(d.regle_le) : (d.statut === "gagne" || d.statut === "perdu" || d.statut === "annule" ? "heure de règlement INCONNUE" : null), "décidée le " + heurePar(d.decide_le_utc), "importée le " + heurePar(d.cree_le)].filter(Boolean);
+      corps.appendChild(el("p", "discret petit", meta.join(" · ")));
+      det.appendChild(corps);
+      zone.appendChild(det);
+    });
+  }
+
+  function dessinerAgentTotaux(zone, rows) {
+    const jours = AC.gainParJour(rows);
+    if (jours.length >= 2) {
+      const c = el("div", "carte");
+      c.appendChild(el("strong", null, "Gain cumulé par jour (mise plate)"));
+      const sv = courbeSvg(jours.map((j) => ({ y: j.cumul })), (v) => sgn(v) + " u");
+      if (sv) c.appendChild(sv);
+      zone.appendChild(c);
+    }
+    const ch = el("div", "filtres");
+    AC.LECTURES.forEach(([k, nom]) => { const b = el("button", "filtre" + (agLecture === k ? " actif" : ""), nom); b.type = "button"; b.addEventListener("click", () => { agLecture = k; dessinerAgent(); }); ch.appendChild(b); });
+    zone.appendChild(ch);
+    const lect = AC.LECTURES.find((l) => l[0] === agLecture) || AC.LECTURES[0];
+    const groupes = AC.agreger(rows, lect[2]);
+    if (!groupes.length) { zone.appendChild(el("p", "discret petit", "Aucune décision avec ce filtre.")); return; }
+    groupes.forEach((a) => {
+      const c = el("div", "carte");
+      const t = el("div", "prev-tete");
+      t.appendChild(el("strong", null, a.libelle));
+      t.appendChild(el("span", "discret petit", a.n + " décision" + (a.n > 1 ? "s" : "")));
+      c.appendChild(t);
+      const p = el("p", "petit"); p.appendChild(ligneRoi(a)); c.appendChild(p);
+      let d = a.gagnes + " gagnée" + (a.gagnes > 1 ? "s" : "") + " sur " + a.termines + (a.termines ? " (taux réel " + fmtNb(a.gagnes / a.termines * 100, 0) + " %)" : "") + " · " + a.attente + " en attente";
+      if (a.annules) d += " · " + a.annules + " annulée" + (a.annules > 1 ? "s" : "");
+      c.appendChild(el("p", "discret petit", d));
+      zone.appendChild(c);
+    });
+  }
+
+  function dessinerAgentKelly(zone, lignesV) {
+    zone.appendChild(el("div", "bandeau fantome", "Simulation : suppose les probabilités de l'agent bien calibrées ; la mise plate reste la mesure."));
+    zone.appendChild(el("p", "discret petit", "Mêmes décisions, banque fictive de départ 1 000 unités, deux formules FIXÉES : K4 (1/4 de Kelly, plafond 2 % de la banque) et K8 (1/8, plafond 1 %). Mise nulle si f* ≤ 0 ; plancher 0,25 % ; plafond 4 % de la banque par match. Ignore les filtres de l'écran."));
+    [["K4", 0.25, 0.02], ["K8", 0.125, 0.01]].forEach(([nom, fr, pl]) => {
+      const r = AC.simulerKelly(lignesV, fr, pl);
+      const c = el("div", "carte");
+      c.appendChild(el("strong", null, nom + " · banque " + u2(r.banque) + " u (" + (r.variation >= 0 ? "+" : "") + fmtNb(r.variation * 100, 2) + " %)"));
+      c.appendChild(el("p", "petit", "Mise moyenne " + (r.miseMoyenne === null ? "—" : fmtNb(r.miseMoyenne * 100, 2) + " %") + " de la banque · mise maximale " + (r.miseMax === null ? "—" : fmtNb(r.miseMax * 100, 2) + " %") + " · creux maximal " + fmtNb(r.creux * 100, 2) + " % · " + r.nbMiseNulle + " pari" + (r.nbMiseNulle > 1 ? "s" : "") + " à mise nulle" + (r.nbManquant ? " (dont " + r.nbManquant + " sans p ou sans cote)" : "")));
+      const sv = courbeSvg(r.courbe.map((p) => ({ y: p.banque })), (v) => u2(v) + " u");
+      if (sv) c.appendChild(sv); else c.appendChild(el("p", "discret petit", "Pas encore de pari réglé : pas de courbe."));
+      c.appendChild(el("p", "discret petit", "En attente de règlement (hors banque) : " + r.attente.n + " décision" + (r.attente.n > 1 ? "s" : "") + ", mises " + u2(r.attente.mises) + " u" + (lignesV.some((d) => (d.statut === "gagne" || d.statut === "perdu" || d.statut === "annule") && !d.regle_le) ? " · certaines décisions réglées n'ont pas d'heure de règlement : elles attendent." : "")));
+      zone.appendChild(c);
+    });
+  }
+
+  $("btn-agent").addEventListener("click", () => aller("agent"));
+  $("btn-agent-retour").addEventListener("click", () => aller("paris"));
 
   function dessinerAnalyse() {
     const zone = $("analyse-contenu");

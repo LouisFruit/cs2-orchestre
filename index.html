@@ -12,7 +12,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=2.37">
+<link rel="stylesheet" href="style.css?v=2.38">
 </head>
 <body>
 
@@ -105,7 +105,14 @@
     </section>
     <section id="page-paris" class="page cache">
       <h2>Paris</h2>
+      <button id="btn-agent" type="button" class="bouton secondaire">🤖 Agent (argent fictif)</button>
       <div id="paris-contenu"></div>
+    </section>
+    <!-- Agent (v2.38) : page ouverte depuis l'onglet Paris -->
+    <section id="page-agent" class="page cache">
+      <button id="btn-agent-retour" type="button" class="bouton-mini">← Paris</button>
+      <h2>Agent</h2>
+      <div id="agent-contenu"></div>
     </section>
     <section id="page-reglages" class="page cache">
       <h2>Réglages</h2>
@@ -158,7 +165,7 @@
       </details>
 
       <button id="btn-deconnexion" class="bouton secondaire">Se déconnecter</button>
-      <p class="discret petit">Sy(m)phon-e-sport v2.37 · CS2'Orchestre</p>
+      <p class="discret petit">Sy(m)phon-e-sport v2.38 · CS2'Orchestre</p>
     </section>
   </main>
 
@@ -201,7 +208,8 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=2.37"></script>
-<script src="app.js?v=2.37"></script>
+<script src="config.js?v=2.38"></script>
+<script src="agent-calcul.js?v=2.38"></script>
+  <script src="app.js?v=2.38"></script>
 </body>
 </html>

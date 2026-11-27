@@ -315,3 +315,11 @@ details summary{cursor:pointer;font-weight:600}
 .prev-resume{font-weight:400}
 .prev-corps .ligne-carte{display:block;border-top:1px dashed var(--bord);padding-top:8px}
 .prev-corps .ligne-carte .prev-tete{display:flex;justify-content:space-between;align-items:center;gap:8px}
+
+/* v2.38 : écran « Agent » */
+.titre-version{margin:8px 0 4px}
+.badge-gris{display:inline-block;border-radius:999px;padding:1px 8px;font-size:.72rem;background:var(--bord);color:var(--discret)}
+.roi-ligne{font-size:.95rem}
+.courbe-agent{width:100%;height:auto;color:var(--accent);margin:6px 0}
+.courbe-txt{fill:var(--discret);font-size:11px}
+#btn-agent{width:100%;margin-bottom:10px}
